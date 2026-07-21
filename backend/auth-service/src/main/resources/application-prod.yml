@@ -1,0 +1,9 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+fmud:
+  dev-users:
+    secretario-password: ${FMUD_DEV_SECRETARIO_PASSWORD:}
+    admin-password: ${FMUD_DEV_ADMIN_PASSWORD:}

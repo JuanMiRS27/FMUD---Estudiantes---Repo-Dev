@@ -1,0 +1,11 @@
+.git
+.idea
+.vscode
+node_modules
+frontend/fmud-web/node_modules
+frontend/fmud-web/dist
+frontend/fmud-web/.angular
+backend/**/target
+target
+*.log
+.env

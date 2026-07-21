@@ -1,0 +1,8 @@
+fmud:
+  gateway:
+    auth-service-url: ${AUTH_SERVICE_URL:http://auth-service:8081}
+    student-service-url: ${STUDENT_SERVICE_URL:http://student-service:8082}
+
+logging:
+  level:
+    com.fmud.gateway: info

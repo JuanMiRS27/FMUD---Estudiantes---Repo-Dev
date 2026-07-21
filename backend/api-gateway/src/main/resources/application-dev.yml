@@ -1,0 +1,4 @@
+fmud:
+  gateway:
+    auth-service-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+    student-service-url: ${STUDENT_SERVICE_URL:http://localhost:8082}

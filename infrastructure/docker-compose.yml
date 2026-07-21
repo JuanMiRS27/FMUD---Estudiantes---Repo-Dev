@@ -1,0 +1,159 @@
+name: fmud-platform
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: fmud-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fmud}
+      POSTGRES_USER: ${POSTGRES_USER:-fmud_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      AUTH_DB_NAME: ${AUTH_DB_NAME:-fmud_auth}
+      STUDENT_DB_NAME: ${STUDENT_DB_NAME:-fmud_students}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+      TZ: ${TZ:-America/Bogota}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - fmud-postgres-data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - fmud-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fmud_user} -d ${POSTGRES_DB:-fmud}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: backend/auth-service/Dockerfile
+    container_name: fmud-auth-service
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      AUTH_SERVICE_PORT: 8081
+      AUTH_DB_NAME: ${AUTH_DB_NAME:-fmud_auth}
+      AUTH_DB_USER: ${POSTGRES_USER:-fmud_user}
+      AUTH_DB_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      JWT_ISSUER: ${JWT_ISSUER:-fmud-auth-service}
+      JWT_SECRET: ${JWT_SECRET:-replace_with_a_long_secure_value_32_chars_min}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-3600}
+      FMUD_DEV_SECRETARIO_PASSWORD: ${FMUD_DEV_SECRETARIO_PASSWORD:-Cambiar123!}
+      FMUD_DEV_ADMIN_PASSWORD: ${FMUD_DEV_ADMIN_PASSWORD:-Cambiar123!}
+      TZ: ${TZ:-America/Bogota}
+    ports:
+      - "${AUTH_SERVICE_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - fmud-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  student-service:
+    build:
+      context: ..
+      dockerfile: backend/student-service/Dockerfile
+    container_name: fmud-student-service
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      STUDENT_SERVICE_PORT: 8082
+      TZ: ${TZ:-America/Bogota}
+    ports:
+      - "${STUDENT_SERVICE_PORT:-8082}:8082"
+    networks:
+      - fmud-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: backend/api-gateway/Dockerfile
+    container_name: fmud-api-gateway
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      API_GATEWAY_PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8081
+      STUDENT_SERVICE_URL: http://student-service:8082
+      GATEWAY_TIMEOUT_SECONDS: ${GATEWAY_TIMEOUT_SECONDS:-3}
+      JWT_ISSUER: ${JWT_ISSUER:-fmud-auth-service}
+      JWT_SECRET: ${JWT_SECRET:-replace_with_a_long_secure_value_32_chars_min}
+      TZ: ${TZ:-America/Bogota}
+    ports:
+      - "${API_GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    networks:
+      - fmud-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  frontend:
+    build:
+      context: ../frontend/fmud-web
+      dockerfile: Dockerfile
+    container_name: fmud-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-4200}:8080"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - fmud-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  fmud-network:
+    name: fmud-network
+    driver: bridge
+
+volumes:
+  fmud-postgres-data:
+    name: fmud-postgres-data
