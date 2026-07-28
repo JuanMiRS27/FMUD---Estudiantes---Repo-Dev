@@ -19,7 +19,8 @@ RUN apt-get update \
     && useradd --system --gid fmud --home-dir /app --shell /usr/sbin/nologin fmud
 WORKDIR /app
 COPY --from=build /workspace/backend/student-service/target/student-service-*.jar app.jar
-RUN chown -R fmud:fmud /app
+RUN mkdir -p /app/data/student-photos /app/data/student-documents \
+    && chown -R fmud:fmud /app
 USER fmud
 EXPOSE 8082
 STOPSIGNAL SIGTERM

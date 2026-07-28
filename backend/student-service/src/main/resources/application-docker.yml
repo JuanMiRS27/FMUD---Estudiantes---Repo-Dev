@@ -1,3 +1,9 @@
 logging:
   level:
     com.fmud.student: info
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${STUDENT_DB_NAME:fmud_students}
+    username: ${STUDENT_DB_USER:${POSTGRES_USER:fmud_user}}
+    password: ${STUDENT_DB_PASSWORD:${POSTGRES_PASSWORD:change_me}}

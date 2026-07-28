@@ -15,11 +15,23 @@ import { SidebarService } from '../../services/sidebar.service';
         }
       </button>
 
-      <nav class="nav-menu" aria-label="Navegaci&oacute;n principal">
-        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item" (click)="sidebar.closeMobile()">
+      <nav class="nav-menu" aria-label="Navegacion principal">
+        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item" title="Dashboard" (click)="sidebar.closeMobile()">
           <span class="nav-icon" aria-hidden="true">D</span>
           @if (!sidebar.collapsed()) {
             <span>Dashboard</span>
+          }
+        </a>
+        <a routerLink="/students" routerLinkActive="active" class="nav-item" title="Estudiantes" (click)="sidebar.closeMobile()">
+          <span class="nav-icon" aria-hidden="true">E</span>
+          @if (!sidebar.collapsed()) {
+            <span>Estudiantes</span>
+          }
+        </a>
+        <a routerLink="/students" routerLinkActive="active" class="nav-item" title="Hojas de Vida" (click)="sidebar.closeMobile()">
+          <span class="nav-icon" aria-hidden="true">H</span>
+          @if (!sidebar.collapsed()) {
+            <span>Hojas de Vida</span>
           }
         </a>
       </nav>

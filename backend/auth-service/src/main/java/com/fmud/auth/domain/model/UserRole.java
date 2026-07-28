@@ -1,7 +1,7 @@
 package com.fmud.auth.domain.model;
 
 public enum UserRole {
-    SECRETARIO("Secretaría"),
+    SECRETARIO("Secretaria"),
     ADMIN("Junta Administrativa");
 
     private final String displayName;

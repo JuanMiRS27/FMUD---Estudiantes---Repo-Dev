@@ -1,5 +1,5 @@
 import { Component, computed, ElementRef, HostListener, inject, signal } from '@angular/core';
-import { NavigationStart, Router, RouterLink } from '@angular/router';
+import { NavigationStart, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { AuthService } from '../../auth/auth.service';
 import { roleDisplayName } from '../../models/role.model';
@@ -8,7 +8,6 @@ import { SidebarService } from '../../services/sidebar.service';
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [RouterLink],
   template: `
     <header class="topbar">
       <button class="icon-button mobile-menu" type="button" aria-label="Abrir menu" (click)="sidebar.openMobile()">
@@ -56,17 +55,6 @@ import { SidebarService } from '../../services/sidebar.service';
                   <span>{{ roleLabel() }}</span>
                 </div>
               </div>
-
-              <div class="menu-divider"></div>
-
-              <a class="menu-option" routerLink="/profile" role="menuitem" (click)="closeMenu()">
-                <span class="menu-icon" aria-hidden="true">U</span>
-                <span>Mi perfil</span>
-              </a>
-              <a class="menu-option" routerLink="/settings" role="menuitem" (click)="closeMenu()">
-                <span class="menu-icon" aria-hidden="true">C</span>
-                <span>Configuraci&oacute;n</span>
-              </a>
 
               <div class="menu-divider"></div>
 

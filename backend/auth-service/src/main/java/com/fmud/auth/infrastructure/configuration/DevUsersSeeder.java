@@ -30,7 +30,7 @@ public class DevUsersSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        createIfMissing("Usuario Secretaría", "secretario@fmud.local", properties.secretarioPassword(), UserRole.SECRETARIO);
+        createIfMissing("Usuario Secretaria", "secretario@fmud.local", properties.secretarioPassword(), UserRole.SECRETARIO);
         createIfMissing("Usuario Junta Administrativa", "admin@fmud.local", properties.adminPassword(), UserRole.ADMIN);
     }
 

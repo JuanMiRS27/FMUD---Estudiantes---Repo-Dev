@@ -3,8 +3,11 @@ package com.fmud.auth.infrastructure.exception;
 import com.fmud.auth.domain.exception.AuthenticationFailedException;
 import com.fmud.auth.domain.exception.UserDisabledException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -14,6 +17,8 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(AuthenticationFailedException.class)
     ResponseEntity<ApiErrorResponse> authenticationFailed(AuthenticationFailedException ex, HttpServletRequest request) {
         return error(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", ex.getMessage(), request.getRequestURI(), List.of());
@@ -29,12 +34,18 @@ public class GlobalExceptionHandler {
         List<String> details = ex.getBindingResult().getFieldErrors().stream()
                 .map(field -> field.getField() + ": " + field.getDefaultMessage())
                 .toList();
-        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Los datos enviados no son válidos.", request.getRequestURI(), details);
+        return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Los datos enviados no son validos.", request.getRequestURI(), details);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ApiErrorResponse> malformedJson(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return error(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "La solicitud no tiene un formato valido.", request.getRequestURI(), List.of());
     }
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiErrorResponse> internal(Exception ex, HttpServletRequest request) {
-        return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Ocurrió un error interno no controlado.", request.getRequestURI(), List.of());
+        log.error("Unhandled auth-service error at {}", request.getRequestURI(), ex);
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Ocurrio un error interno no controlado.", request.getRequestURI(), List.of());
     }
 
     private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message, String path, List<String> details) {

@@ -76,9 +76,24 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       STUDENT_SERVICE_PORT: 8082
+      STUDENT_DB_NAME: ${STUDENT_DB_NAME:-fmud_students}
+      STUDENT_DB_USER: ${POSTGRES_USER:-fmud_user}
+      STUDENT_DB_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      STUDENT_PHOTO_STORAGE_PATH: ${STUDENT_PHOTO_STORAGE_PATH:-/app/data/student-photos}
+      STUDENT_DOCUMENT_STORAGE_PATH: ${STUDENT_DOCUMENT_STORAGE_PATH:-/app/data/student-documents}
+      MAX_PHOTO_SIZE_MB: ${MAX_PHOTO_SIZE_MB:-5}
+      MAX_DOCUMENT_SIZE_MB: ${MAX_DOCUMENT_SIZE_MB:-10}
+      JWT_ISSUER: ${JWT_ISSUER:-fmud-auth-service}
+      JWT_SECRET: ${JWT_SECRET:-replace_with_a_long_secure_value_32_chars_min}
       TZ: ${TZ:-America/Bogota}
     ports:
       - "${STUDENT_SERVICE_PORT:-8082}:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - fmud-student-photos:/app/data/student-photos
+      - fmud-student-documents:/app/data/student-documents
     networks:
       - fmud-network
     healthcheck:
@@ -111,6 +126,8 @@ services:
       - "${API_GATEWAY_PORT:-8080}:8080"
     depends_on:
       auth-service:
+        condition: service_healthy
+      student-service:
         condition: service_healthy
     networks:
       - fmud-network
@@ -157,3 +174,7 @@ networks:
 volumes:
   fmud-postgres-data:
     name: fmud-postgres-data
+  fmud-student-photos:
+    name: fmud-student-photos
+  fmud-student-documents:
+    name: fmud-student-documents

@@ -20,16 +20,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent)
       },
       {
-        path: 'profile',
+        path: 'students',
         canActivate: [roleGuard],
         data: { roles: ['SECRETARIO', 'ADMIN'] },
-        loadComponent: () => import('./features/profile/profile.component').then((m) => m.ProfileComponent)
+        loadComponent: () => import('./features/students/students.component').then((m) => m.StudentsComponent)
       },
       {
-        path: 'settings',
+        path: 'students/:id/resume',
         canActivate: [roleGuard],
         data: { roles: ['SECRETARIO', 'ADMIN'] },
-        loadComponent: () => import('./features/settings/settings.component').then((m) => m.SettingsComponent)
+        loadComponent: () => import('./features/resumes/resume.component').then((m) => m.ResumeComponent)
       },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
     ]

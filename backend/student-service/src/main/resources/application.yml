@@ -6,6 +6,31 @@ spring:
     name: student-service
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+  servlet:
+    multipart:
+      max-file-size: ${MAX_DOCUMENT_SIZE_MB:10}MB
+      max-request-size: ${MAX_DOCUMENT_SIZE_MB:10}MB
+  datasource:
+    url: ${STUDENT_DB_URL:jdbc:postgresql://localhost:5432/fmud_students}
+    username: ${STUDENT_DB_USER:fmud_user}
+    password: ${STUDENT_DB_PASSWORD:change_me}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+fmud:
+  storage:
+    photo-path: ${STUDENT_PHOTO_STORAGE_PATH:./data/student-photos}
+    document-path: ${STUDENT_DOCUMENT_STORAGE_PATH:./data/student-documents}
+    max-photo-size-mb: ${MAX_PHOTO_SIZE_MB:5}
+    max-document-size-mb: ${MAX_DOCUMENT_SIZE_MB:10}
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:fmud-auth-service}
+      secret: ${JWT_SECRET:dev-only-change-this-secret-with-at-least-32-chars}
 
 management:
   endpoints:

@@ -1,52 +1,46 @@
-# API inicial
+# API
 
-Base local mediante gateway: `http://localhost:8080/api`.
+Base mediante gateway: `http://localhost:8080/api`.
 
-## POST /api/auth/login
+Todos los endpoints, excepto login y health, requieren `Authorization: Bearer <token>`.
 
-Solicitud:
+## Auth
 
-```json
-{
-  "email": "secretario@fmud.local",
-  "password": "Cambiar123!"
-}
-```
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/health`
 
-Respuesta:
+## Estudiantes
 
-```json
-{
-  "accessToken": "jwt-token",
-  "tokenType": "Bearer",
-  "expiresIn": 3600,
-  "user": {
-    "id": "uuid",
-    "name": "Usuario Secretaría",
-    "email": "secretario@fmud.local",
-    "role": "SECRETARIO"
-  }
-}
-```
+- `POST /api/students` multipart: datos del estudiante y `photo` opcional.
+- `GET /api/students?page=0&size=12&search=&status=` lista paginada.
+- `GET /api/students/{id}`
+- `PUT /api/students/{id}` multipart.
+- `PATCH /api/students/{id}/status` con `{ "status": "ACTIVE|INACTIVE" }`.
 
-## GET /api/auth/me
+`PATCH /status` requiere `ADMIN`.
 
-Requiere `Authorization: Bearer <token>`.
+## Hoja de vida
 
-## GET /api/health
+- `GET /api/students/{id}/resume`
 
-Retorna estado básico del gateway.
+Devuelve estudiante, documentos activos e historial.
 
-## Error estándar
+## Documentos
 
-```json
-{
-  "timestamp": "2026-07-21T13:00:00Z",
-  "status": 400,
-  "error": "Bad Request",
-  "code": "VALIDATION_ERROR",
-  "message": "Los datos enviados no son válidos.",
-  "path": "/api/auth/login",
-  "details": []
-}
-```
+- `POST /api/students/{id}/documents` multipart: `documentType`, `displayName`, `description`, `file`.
+- `GET /api/students/{id}/documents`
+- `GET /api/students/{id}/documents/{documentId}`
+- `GET /api/students/{id}/documents/{documentId}/download`
+- `PUT /api/students/{id}/documents/{documentId}` multipart para reemplazar.
+- `DELETE /api/students/{id}/documents/{documentId}`.
+
+`DELETE` requiere `ADMIN`.
+
+Tipos iniciales sugeridos: Documento de identidad, Registro civil, Certificado de estudio, Afiliacion a salud, Hoja de vida firmada, Fotografia adicional y Otro. La API guarda el tipo como texto controlado por la aplicacion para permitir ampliar el catalogo.
+
+## Historial
+
+- `GET /api/students/{id}/history`
+
+Registra creacion, edicion, cambio de estado, carga, reemplazo y eliminacion de documentos.
