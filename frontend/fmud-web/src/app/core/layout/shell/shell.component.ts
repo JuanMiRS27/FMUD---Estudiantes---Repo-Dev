@@ -15,7 +15,7 @@ import { NotificationService } from '../../services/notification.service';
       <main class="main-panel">
         <app-header />
         @if (notification.message(); as message) {
-          <button class="toast" type="button" (click)="notification.clear()">{{ message }}</button>
+          <button class="toast" type="button" aria-label="Cerrar notificacion" (click)="notification.clear()">{{ message }}</button>
         }
         <section class="content">
           <router-outlet />

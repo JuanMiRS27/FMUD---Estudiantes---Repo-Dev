@@ -10,6 +10,8 @@ import java.util.UUID;
 interface SpringDataDocumentRepository extends JpaRepository<StudentDocumentEntity, UUID> {
     Optional<StudentDocumentEntity> findByIdAndStudentId(UUID id, UUID studentId);
 
+    Optional<StudentDocumentEntity> findFirstByStudentIdAndStatusAndDocumentTypeOrderByCreatedAtDesc(UUID studentId, DocumentStatus status, String documentType);
+
     List<StudentDocumentEntity> findByStudentIdAndStatusOrderByCreatedAtDesc(UUID studentId, DocumentStatus status);
 
     List<StudentDocumentEntity> findByStudentIdAndStatusAndDocumentTypeOrderByCreatedAtDesc(UUID studentId, DocumentStatus status, String documentType);

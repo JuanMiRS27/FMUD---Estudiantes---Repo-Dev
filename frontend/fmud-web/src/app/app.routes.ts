@@ -14,25 +14,31 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       {
-        path: 'dashboard',
-        canActivate: [roleGuard],
-        data: { roles: ['SECRETARIO', 'ADMIN'] },
-        loadComponent: () => import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent)
-      },
-      {
-        path: 'students',
+        path: 'hojas-de-vida',
         canActivate: [roleGuard],
         data: { roles: ['SECRETARIO', 'ADMIN'] },
         loadComponent: () => import('./features/students/students.component').then((m) => m.StudentsComponent)
       },
       {
-        path: 'students/:id/resume',
+        path: 'hojas-de-vida/nueva',
         canActivate: [roleGuard],
         data: { roles: ['SECRETARIO', 'ADMIN'] },
         loadComponent: () => import('./features/resumes/resume.component').then((m) => m.ResumeComponent)
       },
-      { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
+      {
+        path: 'hojas-de-vida/:id',
+        canActivate: [roleGuard],
+        data: { roles: ['SECRETARIO', 'ADMIN'] },
+        loadComponent: () => import('./features/resumes/resume.component').then((m) => m.ResumeComponent)
+      },
+      {
+        path: 'users',
+        canActivate: [roleGuard],
+        data: { roles: ['ADMIN'] },
+        loadComponent: () => import('./features/users/users.component').then((m) => m.UsersComponent)
+      },
+      { path: '', pathMatch: 'full', redirectTo: 'hojas-de-vida' }
     ]
   },
-  { path: '**', redirectTo: 'dashboard' }
+  { path: '**', redirectTo: 'hojas-de-vida' }
 ];

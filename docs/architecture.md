@@ -19,7 +19,90 @@ Los controladores no contienen reglas de negocio y no se exponen entidades JPA.
 
 ## Datos y archivos
 
-PostgreSQL se gestiona con Flyway y `ddl-auto=validate`. Los archivos no se guardan como Base64: se almacenan en volumen Docker con claves fisicas unicas y se descargan mediante endpoint autorizado.
+PostgreSQL usa una sola base `fmud` con schemas `auth` y `students`, gestionada con Flyway y `ddl-auto=validate`. Los archivos no se guardan como Base64: se almacenan en volumen Docker con claves fisicas unicas y se descargan mediante endpoint autorizado.
+
+## Modelo entidad-relacion final
+
+```mermaid
+erDiagram
+    AUTH_USERS ||--o{ STUDENT_DOCUMENTS : uploads
+    AUTH_USERS ||--o{ STUDENT_HISTORY_EVENTS : acts
+    AUTH_USERS ||--o{ DOCUMENT_HISTORY_EVENTS : acts
+    STUDENTS ||--o{ ENROLLMENTS : has
+    STUDENTS ||--o{ STUDENT_DOCUMENTS : owns
+    STUDENTS ||--o{ STUDENT_HISTORY_EVENTS : has
+    STUDENT_DOCUMENTS ||--o{ DOCUMENT_HISTORY_EVENTS : has
+
+    AUTH_USERS {
+        UUID id PK
+        VARCHAR name
+        VARCHAR email UK
+        VARCHAR password_hash
+        VARCHAR role
+        BOOLEAN enabled
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    STUDENTS {
+        UUID id PK
+        VARCHAR first_name
+        VARCHAR last_name
+        VARCHAR document_number UK
+        DATE birth_date
+        VARCHAR birth_place
+        VARCHAR address
+        VARCHAR phone
+        VARCHAR email
+        VARCHAR status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    ENROLLMENTS {
+        UUID id PK
+        UUID student_id FK
+        VARCHAR period_code
+        VARCHAR program
+        VARCHAR status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    STUDENT_DOCUMENTS {
+        UUID id PK
+        UUID student_id FK
+        VARCHAR document_type
+        VARCHAR display_name
+        VARCHAR original_name
+        VARCHAR storage_key
+        VARCHAR content_type
+        BIGINT size_bytes
+        VARCHAR description
+        VARCHAR status
+        UUID uploaded_by_user_id FK
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    STUDENT_HISTORY_EVENTS {
+        UUID id PK
+        UUID student_id FK
+        UUID actor_user_id FK
+        VARCHAR action
+        VARCHAR summary
+        TIMESTAMPTZ created_at
+    }
+
+    DOCUMENT_HISTORY_EVENTS {
+        UUID id PK
+        UUID document_id FK
+        UUID actor_user_id FK
+        VARCHAR action
+        VARCHAR summary
+        TIMESTAMPTZ created_at
+    }
+```
 
 ## Seguridad
 

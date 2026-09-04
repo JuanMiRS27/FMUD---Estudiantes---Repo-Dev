@@ -11,5 +11,7 @@ public interface DocumentRepositoryPort {
 
     Optional<StudentDocument> findByIdAndStudentId(UUID id, UUID studentId);
 
+    Optional<StudentDocument> findActiveByStudentIdAndType(UUID studentId, String type);
+
     List<StudentDocument> findActiveByStudentId(UUID studentId, String type);
 }

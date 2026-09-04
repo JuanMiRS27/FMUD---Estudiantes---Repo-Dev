@@ -48,6 +48,22 @@ describe('ResumeComponent', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-01T00:00:00Z'
       },
+      details: {
+        personal: {},
+        socioeconomic: {},
+        academic: {},
+        motivation: {},
+        availability: {},
+        foundationKnowledge: {},
+        authorizations: {},
+        health: {},
+        riskFactors: {},
+        academicPerformance: {},
+        programKnowledge: {},
+        institutionalCommitment: {},
+        declaration: {}
+      },
+      enrollments: [],
       documents: [{
         id: 'd1',
         studentId: 's1',
@@ -58,7 +74,7 @@ describe('ResumeComponent', () => {
         size: 1024,
         description: null,
         status: 'ACTIVE',
-        uploadedByName: 'Secretaria',
+        uploadedByUserId: 'user-1',
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-01T00:00:00Z'
       }],

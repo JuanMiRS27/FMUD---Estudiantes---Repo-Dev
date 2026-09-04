@@ -14,8 +14,6 @@ public record Student(
         String address,
         String phone,
         String email,
-        String photoStorageKey,
-        String photoContentType,
         StudentStatus status,
         Instant createdAt,
         Instant updatedAt

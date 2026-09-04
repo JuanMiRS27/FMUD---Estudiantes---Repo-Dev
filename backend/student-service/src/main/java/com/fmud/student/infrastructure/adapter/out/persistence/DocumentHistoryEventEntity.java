@@ -7,23 +7,18 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "student_history_events")
-public class HistoryEventEntity {
+@Table(name = "document_history_events", schema = "students")
+public class DocumentHistoryEventEntity {
     @Id
     public UUID id;
     @Column(nullable = false)
-    public UUID studentId;
+    public UUID documentId;
+    @Column(nullable = false)
     public UUID actorUserId;
-    @Column(nullable = false)
-    public String actorName;
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 60)
     public HistoryAction action;
-    @Column(nullable = false)
-    public String entityType;
-    @Column(nullable = false)
-    public UUID entityId;
-    @Column(nullable = false)
+    @Column(nullable = false, length = 500)
     public String summary;
     @Column(nullable = false)
     public Instant createdAt;

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,6 +56,11 @@ class LoginServiceTest {
         @Override
         public Optional<User> findById(UUID id) {
             return found;
+        }
+
+        @Override
+        public List<User> findAll() {
+            return found.stream().toList();
         }
 
         @Override

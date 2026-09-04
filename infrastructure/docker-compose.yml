@@ -9,8 +9,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-fmud}
       POSTGRES_USER: ${POSTGRES_USER:-fmud_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
-      AUTH_DB_NAME: ${AUTH_DB_NAME:-fmud_auth}
-      STUDENT_DB_NAME: ${STUDENT_DB_NAME:-fmud_students}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
       TZ: ${TZ:-America/Bogota}
     ports:
@@ -40,7 +38,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       AUTH_SERVICE_PORT: 8081
-      AUTH_DB_NAME: ${AUTH_DB_NAME:-fmud_auth}
+      POSTGRES_DB: ${POSTGRES_DB:-fmud}
       AUTH_DB_USER: ${POSTGRES_USER:-fmud_user}
       AUTH_DB_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
       JWT_ISSUER: ${JWT_ISSUER:-fmud-auth-service}
@@ -76,7 +74,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       STUDENT_SERVICE_PORT: 8082
-      STUDENT_DB_NAME: ${STUDENT_DB_NAME:-fmud_students}
+      POSTGRES_DB: ${POSTGRES_DB:-fmud}
       STUDENT_DB_USER: ${POSTGRES_USER:-fmud_user}
       STUDENT_DB_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
       STUDENT_PHOTO_STORAGE_PATH: ${STUDENT_PHOTO_STORAGE_PATH:-/app/data/student-photos}
@@ -90,6 +88,8 @@ services:
       - "${STUDENT_SERVICE_PORT:-8082}:8082"
     depends_on:
       postgres:
+        condition: service_healthy
+      auth-service:
         condition: service_healthy
     volumes:
       - fmud-student-photos:/app/data/student-photos

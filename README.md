@@ -6,7 +6,7 @@ MVP dockerizado para la Fundacion Manos Unidas de Dios, limitado a la gestion de
 
 El sistema permite registrar, consultar, editar y desactivar estudiantes, gestionar su hoja de vida individual, cargar fotografias, adjuntar/descargar/reemplazar/eliminar documentos segun permisos y consultar historial de cambios.
 
-No incluye observador, asistencias, alimentacion, notas, boletines, enfermeria, citas medicas, pagos, evaluaciones, calificaciones, practicas, matriculas, notificaciones ni reportes academicos.
+No incluye observador, asistencias, alimentacion, notas, boletines, enfermeria, citas medicas, pagos, evaluaciones, calificaciones, practicas, notificaciones ni reportes academicos.
 
 ## Roles
 

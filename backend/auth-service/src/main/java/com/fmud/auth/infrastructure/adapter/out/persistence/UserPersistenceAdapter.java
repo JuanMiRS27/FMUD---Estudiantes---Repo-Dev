@@ -5,6 +5,8 @@ import com.fmud.auth.domain.model.User;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -23,6 +25,14 @@ public class UserPersistenceAdapter implements UserRepositoryPort {
     @Override
     public Optional<User> findById(UUID id) {
         return repository.findById(id).map(this::toDomain);
+    }
+
+    @Override
+    public List<User> findAll() {
+        return repository.findAll().stream()
+                .map(this::toDomain)
+                .sorted(Comparator.comparing(User::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 
     @Override

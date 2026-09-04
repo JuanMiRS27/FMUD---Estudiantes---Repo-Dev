@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { environment } from '../../../environments/environment';
-import { PageResponse, Resume, Student, StudentDocument, StudentFormValue, StudentStatus } from './student.model';
+import { Enrollment, EnrollmentFormValue, PageResponse, Resume, ResumeDetails, Student, StudentDocument, StudentFormValue, StudentStatus } from './student.model';
 
 @Injectable({ providedIn: 'root' })
 export class StudentsService {
@@ -35,6 +35,18 @@ export class StudentsService {
     return this.http.get<Resume>(`${this.baseUrl}/${id}/resume`);
   }
 
+  updateResumeDetails(id: string, details: ResumeDetails) {
+    return this.http.put<ResumeDetails>(`${this.baseUrl}/${id}/resume/details`, details);
+  }
+
+  createEnrollment(studentId: string, value: EnrollmentFormValue) {
+    return this.http.post<Enrollment>(`${this.baseUrl}/${studentId}/enrollments`, value);
+  }
+
+  updateEnrollment(studentId: string, enrollmentId: string, value: EnrollmentFormValue) {
+    return this.http.put<Enrollment>(`${this.baseUrl}/${studentId}/enrollments/${enrollmentId}`, value);
+  }
+
   attachDocument(studentId: string, documentType: string, displayName: string, description: string, file: File) {
     const data = new FormData();
     data.append('documentType', documentType);
@@ -42,6 +54,15 @@ export class StudentsService {
     data.append('description', description);
     data.append('file', file);
     return this.http.post<StudentDocument>(`${this.baseUrl}/${studentId}/documents`, data);
+  }
+
+  replaceDocument(studentId: string, documentId: string, documentType: string, displayName: string, description: string, file: File) {
+    const data = new FormData();
+    data.append('documentType', documentType);
+    data.append('displayName', displayName);
+    data.append('description', description);
+    data.append('file', file);
+    return this.http.put<StudentDocument>(`${this.baseUrl}/${studentId}/documents/${documentId}`, data);
   }
 
   deleteDocument(studentId: string, documentId: string) {

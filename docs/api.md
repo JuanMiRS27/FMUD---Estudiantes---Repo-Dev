@@ -12,7 +12,7 @@ Todos los endpoints, excepto login y health, requieren `Authorization: Bearer <t
 
 ## Estudiantes
 
-- `POST /api/students` multipart: datos del estudiante y `photo` opcional.
+- `POST /api/students` multipart: datos del estudiante y `photo` opcional. La foto se registra como documento activo `PHOTO`.
 - `GET /api/students?page=0&size=12&search=&status=` lista paginada.
 - `GET /api/students/{id}`
 - `PUT /api/students/{id}` multipart.
@@ -24,7 +24,15 @@ Todos los endpoints, excepto login y health, requieren `Authorization: Bearer <t
 
 - `GET /api/students/{id}/resume`
 
-Devuelve estudiante, documentos activos e historial.
+Devuelve estudiante, matriculas, documentos activos e historial.
+
+## Matriculas
+
+- `POST /api/students/{id}/enrollments` con `{ "periodCode": "2026-1", "program": "Programa Infantil", "status": "ENROLLED" }`.
+- `GET /api/students/{id}/enrollments`
+- `PUT /api/students/{id}/enrollments/{enrollmentId}` para actualizar periodo, programa o estado.
+
+Estados permitidos: `ENROLLED`, `WITHDRAWN`, `COMPLETED`. Un estudiante solo puede tener una matricula por `periodCode`.
 
 ## Documentos
 
@@ -37,10 +45,10 @@ Devuelve estudiante, documentos activos e historial.
 
 `DELETE` requiere `ADMIN`.
 
-Tipos iniciales sugeridos: Documento de identidad, Registro civil, Certificado de estudio, Afiliacion a salud, Hoja de vida firmada, Fotografia adicional y Otro. La API guarda el tipo como texto controlado por la aplicacion para permitir ampliar el catalogo.
+Tipos permitidos: `PHOTO`, `IDENTITY_DOCUMENT`, `CIVIL_REGISTRY`, `STUDY_CERTIFICATE`, `HEALTH_AFFILIATION`, `SIGNED_RESUME` y `OTHER`.
 
 ## Historial
 
 - `GET /api/students/{id}/history`
 
-Registra creacion, edicion, cambio de estado, carga, reemplazo y eliminacion de documentos.
+Combina eventos directos del estudiante y eventos documentales obtenidos mediante `document_history_events -> student_documents -> students`.

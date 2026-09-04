@@ -1,8 +1,10 @@
+import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
+import { ApiError } from '../../core/models/auth.model';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
 import { Student, StudentFormValue, StudentStatus } from './student.model';
 import { StudentsService } from './students.service';
@@ -10,24 +12,30 @@ import { StudentsService } from './students.service';
 @Component({
   selector: 'app-students',
   standalone: true,
-  imports: [ReactiveFormsModule, EmptyStateComponent],
+  imports: [ReactiveFormsModule, EmptyStateComponent, DatePipe],
   template: `
     <section class="page-head">
       <div>
-        <p class="section-kicker">Hojas de vida</p>
+        <p class="section-kicker">Fundacion Manos Unidas de Dios</p>
         <h2>Estudiantes</h2>
+        <p>Consulta y administra las hojas de vida registradas.</p>
       </div>
-      <button class="primary-action compact" type="button" (click)="openCreate()">Registrar estudiante</button>
+      <div class="page-actions">
+        <button class="primary-action compact" type="button" (click)="openCreate()">
+          <span aria-hidden="true">+</span>
+          <span>Registrar estudiante</span>
+        </button>
+      </div>
     </section>
 
     <form class="filters" [formGroup]="filters" (ngSubmit)="search()">
       <label>
-        Buscar
-        <input formControlName="search" placeholder="Nombres, apellidos o cedula" />
+        <span>Buscar</span>
+        <input formControlName="search" placeholder="Buscar por nombre o documento..." aria-label="Buscar por nombre o documento" />
       </label>
       <label>
-        Estado
-        <select formControlName="status">
+        <span>Estado</span>
+        <select formControlName="status" aria-label="Filtrar por estado">
           <option value="">Todos</option>
           <option value="ACTIVE">Activo</option>
           <option value="INACTIVE">Inactivo</option>
@@ -35,80 +43,48 @@ import { StudentsService } from './students.service';
       </label>
       <button class="secondary-action" type="submit">Buscar</button>
     </form>
+    @if (statusError()) {
+      <p class="form-error">{{ statusError() }}</p>
+    }
 
     @if (loading()) {
       <app-empty-state title="Cargando" message="Consultando estudiantes registrados." />
     } @else if (error()) {
       <app-empty-state title="Error" message="No fue posible cargar los estudiantes." />
     } @else if (students().length === 0) {
-      <app-empty-state title="Sin resultados" message="Aun no hay estudiantes registrados." />
+      <app-empty-state title="Sin resultados" message="No se encontraron estudiantes que coincidan con la busqueda." />
     } @else {
-      <div class="student-grid">
+      <div class="resume-table" role="table" aria-label="Listado de estudiantes">
+        <div class="resume-table-row resume-table-head" role="row">
+          <span>Nombre</span>
+          <span>Documento</span>
+          <span>Telefono</span>
+          <span>Estado</span>
+          <span>Actualizacion</span>
+          <span>Acciones</span>
+        </div>
         @for (student of students(); track student.id) {
-          <article class="student-card" tabindex="0" (click)="openResume(student)" (keydown.enter)="openResume(student)">
-            <div class="student-card-copy">
-              <h3>{{ student.firstName }} {{ student.lastName }}</h3>
-              <p>CC: {{ student.documentNumber }}</p>
-              <span class="status-pill" [class.inactive]="student.status === 'INACTIVE'">{{ student.status === 'ACTIVE' ? 'Activo' : 'Inactivo' }}</span>
-              <small>Espacio preparado para informacion futura</small>
-            </div>
-            <div class="student-photo">
-              @if (photoUrl(student); as url) {
-                <img [src]="url" alt="Fotografia de {{ student.firstName }} {{ student.lastName }}" />
-              } @else {
-                <span>{{ initials(student) }}</span>
+          <div class="resume-table-row" role="row">
+            <strong>{{ student.firstName }} {{ student.lastName }}</strong>
+            <span>{{ student.documentNumber }}</span>
+            <span>{{ student.phone || 'Sin registrar' }}</span>
+            <span><span class="status-pill" [class.inactive]="student.status === 'INACTIVE'">{{ student.status === 'ACTIVE' ? 'Activo' : 'Inactivo' }}</span></span>
+            <span>{{ student.updatedAt | date:'short' }}</span>
+            <span class="row-actions">
+              <button class="secondary-action" type="button" title="Abrir hoja de vida" (click)="openResume(student)">Ver</button>
+              @if (canDeactivate()) {
+                <button class="danger-action" type="button" title="Cambiar estado" (click)="changeStatus(student, $event)">
+                  {{ student.status === 'ACTIVE' ? 'Desactivar' : 'Activar' }}
+                </button>
               }
-            </div>
-          </article>
+            </span>
+          </div>
         }
       </div>
-      <div class="pagination">
+      <div class="pagination" aria-label="Paginacion">
         <button class="secondary-action" type="button" [disabled]="page() === 0" (click)="go(page() - 1)">Anterior</button>
         <span>Pagina {{ page() + 1 }} de {{ totalPages() || 1 }}</span>
         <button class="secondary-action" type="button" [disabled]="page() + 1 >= totalPages()" (click)="go(page() + 1)">Siguiente</button>
-      </div>
-    }
-
-    @if (modalOpen()) {
-      <div class="modal-backdrop" role="presentation">
-        <form class="student-modal" [formGroup]="form" (ngSubmit)="save()">
-          <header>
-            <h3>{{ editing() ? 'Editar estudiante' : 'Registrar estudiante' }}</h3>
-            <button type="button" class="icon-only" (click)="closeModal()">×</button>
-          </header>
-          <div class="modal-body">
-            <label class="photo-input">
-              Fotografia
-              <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" (change)="selectPhoto($event)" />
-              @if (preview(); as image) {
-                <img [src]="image" alt="Vista previa de fotografia" />
-              }
-            </label>
-            <label>Nombres <input formControlName="firstName" /></label>
-            <label>Apellidos <input formControlName="lastName" /></label>
-            <label>Cedula <input formControlName="documentNumber" /></label>
-            <label>Fecha de nacimiento <input type="date" formControlName="birthDate" /></label>
-            <label>Lugar de nacimiento <input formControlName="birthPlace" /></label>
-            <label>Direccion <input formControlName="address" /></label>
-            <label>Telefono <input formControlName="phone" /></label>
-            <label>Correo electronico <input formControlName="email" /></label>
-            <label>Estado
-              <select formControlName="status">
-                <option value="ACTIVE">Activo</option>
-                <option value="INACTIVE">Inactivo</option>
-              </select>
-            </label>
-            @if (saveError()) {
-              <p class="form-error">{{ saveError() }}</p>
-            }
-          </div>
-          <footer>
-            <button class="secondary-action" type="button" (click)="closeModal()">Cancelar</button>
-            <button class="primary-action compact" type="submit" [disabled]="form.invalid || saving()">
-              {{ saving() ? 'Guardando...' : 'Guardar estudiante' }}
-            </button>
-          </footer>
-        </form>
       </div>
     }
   `
@@ -128,10 +104,13 @@ export class StudentsComponent {
   readonly modalOpen = signal(false);
   readonly saving = signal(false);
   readonly saveError = signal('');
+  readonly statusError = signal('');
   readonly editing = signal<Student | null>(null);
   readonly selectedPhoto = signal<File | null>(null);
   readonly preview = signal<string | null>(null);
+  readonly photoError = signal('');
   readonly canDeactivate = computed(() => this.auth.user()?.role === 'ADMIN');
+  readonly today = new Date().toISOString().slice(0, 10);
 
   readonly filters = this.fb.nonNullable.group({
     search: [''],
@@ -139,15 +118,15 @@ export class StudentsComponent {
   });
 
   readonly form = this.fb.nonNullable.group({
-    firstName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(80), Validators.pattern(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ -]+$/)]],
-    lastName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(120), Validators.pattern(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ -]+$/)]],
-    documentNumber: ['', [Validators.required, Validators.pattern(/^\d{6,12}$/)]],
-    birthDate: ['', Validators.required],
-    birthPlace: [''],
-    address: [''],
-    phone: ['', Validators.pattern(/^[0-9+]{0,20}$/)],
+    firstName: ['', [trimmedRequired(), Validators.minLength(2), Validators.maxLength(80), Validators.pattern(/^[\p{L} -]+$/u)]],
+    lastName: ['', [trimmedRequired(), Validators.minLength(2), Validators.maxLength(120), Validators.pattern(/^[\p{L} -]+$/u)]],
+    documentNumber: ['', [trimmedRequired(), Validators.pattern(/^\d{6,12}$/)]],
+    birthDate: ['', [Validators.required, notFutureDate()]],
+    birthPlace: ['', [optionalNotBlank(), Validators.maxLength(120)]],
+    address: ['', [optionalNotBlank(), Validators.maxLength(180)]],
+    phone: ['', [Validators.maxLength(20), Validators.pattern(/^\+?[0-9](?:[0-9 ]{4,18}[0-9])?$/)]],
     email: ['', [Validators.email, Validators.maxLength(150)]],
-    status: ['ACTIVE' as StudentStatus]
+    status: ['ACTIVE' as StudentStatus, Validators.required]
   });
 
   constructor() {
@@ -179,16 +158,18 @@ export class StudentsComponent {
   }
 
   openCreate(): void {
-    this.editing.set(null);
-    this.form.reset({ firstName: '', lastName: '', documentNumber: '', birthDate: '', birthPlace: '', address: '', phone: '', email: '', status: 'ACTIVE' });
-    this.selectedPhoto.set(null);
-    this.preview.set(null);
-    this.saveError.set('');
-    this.modalOpen.set(true);
+    void this.router.navigate(['/hojas-de-vida/nueva']);
   }
 
   save(): void {
-    if (this.form.invalid || this.saving()) {
+    this.trimTextFields();
+    if (this.saving()) {
+      return;
+    }
+    if (this.form.invalid || this.photoError()) {
+      this.form.markAllAsTouched();
+      this.saveError.set('Debe completar los campos obligatorios y corregir los datos marcados.');
+      queueMicrotask(() => this.scrollToFirstInvalid());
       return;
     }
     this.saving.set(true);
@@ -202,15 +183,40 @@ export class StudentsComponent {
         this.modalOpen.set(false);
         this.load();
       },
-      error: () => this.saveError.set('No fue posible guardar el estudiante. Revisa los datos e intenta de nuevo.')
+      error: (error: ApiError) => this.applySaveError(error)
     });
   }
 
   selectPhoto(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.item(0) ?? null;
+    this.photoError.set('');
+    if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      this.photoError.set('La fotografia debe estar en formato JPG, PNG o WEBP.');
+      input.value = '';
+      this.selectedPhoto.set(null);
+      this.preview.set(null);
+      return;
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      this.photoError.set('La fotografia no puede superar 5 MB.');
+      input.value = '';
+      this.selectedPhoto.set(null);
+      this.preview.set(null);
+      return;
+    }
     this.selectedPhoto.set(file);
     this.preview.set(file ? URL.createObjectURL(file) : null);
+  }
+
+  removePhoto(): void {
+    this.selectedPhoto.set(null);
+    this.preview.set(null);
+    this.photoError.set('');
+    const input = document.getElementById('student-photo') as HTMLInputElement | null;
+    if (input) {
+      input.value = '';
+    }
   }
 
   closeModal(): void {
@@ -218,7 +224,16 @@ export class StudentsComponent {
   }
 
   openResume(student: Student): void {
-    void this.router.navigate(['/students', student.id, 'resume']);
+    void this.router.navigate(['/hojas-de-vida', student.id]);
+  }
+
+  changeStatus(student: Student, event: Event): void {
+    event.stopPropagation();
+    this.statusError.set('');
+    this.service.changeStatus(student.id, student.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE').subscribe({
+      next: () => this.load(),
+      error: (error: ApiError) => this.statusError.set(error.message || 'No fue posible cambiar el estado del estudiante.')
+    });
   }
 
   photoUrl(student: Student): string | null {
@@ -228,4 +243,95 @@ export class StudentsComponent {
   initials(student: Student): string {
     return `${student.firstName.at(0) ?? ''}${student.lastName.at(0) ?? ''}`.toUpperCase();
   }
+
+  showFieldError(controlName: keyof StudentFormValue): boolean {
+    const control = this.form.controls[controlName];
+    return control.invalid && (control.touched || control.dirty);
+  }
+
+  fieldError(controlName: keyof StudentFormValue): string {
+    const control = this.form.controls[controlName];
+    if (!this.showFieldError(controlName)) {
+      return '';
+    }
+    const errors = control.errors ?? {};
+    if (errors['duplicate']) {
+      return 'El numero de documento ya se encuentra registrado.';
+    }
+    if (errors['required'] || errors['blank']) {
+      return 'Este campo es obligatorio.';
+    }
+    if (errors['minlength']) {
+      return `Debe contener al menos ${errors['minlength'].requiredLength} caracteres.`;
+    }
+    if (errors['maxlength']) {
+      return `No puede superar ${errors['maxlength'].requiredLength} caracteres.`;
+    }
+    if (controlName === 'documentNumber' && errors['pattern']) {
+      return 'La cedula debe contener unicamente numeros, entre 6 y 12 digitos.';
+    }
+    if ((controlName === 'firstName' || controlName === 'lastName') && errors['pattern']) {
+      return 'Solo se permiten letras, espacios y guiones.';
+    }
+    if (controlName === 'birthDate' && errors['futureDate']) {
+      return 'La fecha de nacimiento no puede ser futura.';
+    }
+    if (controlName === 'phone' && errors['pattern']) {
+      return 'El telefono solo puede contener digitos, espacios controlados y + al inicio.';
+    }
+    if (controlName === 'email' && errors['email']) {
+      return 'Ingresa un correo electronico valido.';
+    }
+    return 'Revisa este campo.';
+  }
+
+  private trimTextFields(): void {
+    (Object.keys(this.form.controls) as Array<keyof StudentFormValue>).forEach((key) => {
+      const control = this.form.controls[key];
+      const value = control.value;
+      if (typeof value === 'string') {
+        control.setValue(value.trim() as never, { emitEvent: false });
+      }
+    });
+  }
+
+  private scrollToFirstInvalid(): void {
+    const first = document.querySelector('.student-modal .ng-invalid:not(form), .student-modal .field-error') as HTMLElement | null;
+    first?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    first?.focus();
+  }
+
+  private applySaveError(error: ApiError): void {
+    const text = `${error.message ?? ''} ${(error.details ?? []).join(' ')}`.toLowerCase();
+    if (text.includes('cedula') || text.includes('document')) {
+      this.form.controls.documentNumber.setErrors({ duplicate: true });
+      this.form.controls.documentNumber.markAsTouched();
+      this.saveError.set('El numero de documento ya se encuentra registrado.');
+      return;
+    }
+    this.saveError.set(error.message || 'No fue posible guardar el estudiante.');
+  }
+}
+
+function trimmedRequired(): ValidatorFn {
+  return (control: AbstractControl): ValidationErrors | null => {
+    const value = control.value;
+    return typeof value === 'string' && value.trim().length === 0 ? { required: true } : null;
+  };
+}
+
+function optionalNotBlank(): ValidatorFn {
+  return (control: AbstractControl): ValidationErrors | null => {
+    const value = control.value;
+    return typeof value === 'string' && value.length > 0 && value.trim().length === 0 ? { blank: true } : null;
+  };
+}
+
+function notFutureDate(): ValidatorFn {
+  return (control: AbstractControl): ValidationErrors | null => {
+    if (!control.value) {
+      return null;
+    }
+    return String(control.value) > new Date().toISOString().slice(0, 10) ? { futureDate: true } : null;
+  };
 }

@@ -15,7 +15,6 @@ public record StudentDocument(
         String description,
         DocumentStatus status,
         UUID uploadedByUserId,
-        String uploadedByName,
         Instant createdAt,
         Instant updatedAt
 ) {

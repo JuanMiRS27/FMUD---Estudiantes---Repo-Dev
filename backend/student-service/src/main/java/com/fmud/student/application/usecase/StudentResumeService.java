@@ -8,11 +8,13 @@ import com.fmud.student.application.port.in.StudentResumeUseCase;
 import com.fmud.student.application.port.out.DocumentRepositoryPort;
 import com.fmud.student.application.port.out.FileStoragePort;
 import com.fmud.student.application.port.out.HistoryRepositoryPort;
+import com.fmud.student.application.port.out.ResumeDetailsRepositoryPort;
 import com.fmud.student.application.port.out.StudentRepositoryPort;
 import com.fmud.student.domain.document.DocumentStatus;
 import com.fmud.student.domain.document.StudentDocument;
+import com.fmud.student.domain.history.DocumentHistoryEvent;
 import com.fmud.student.domain.history.HistoryAction;
-import com.fmud.student.domain.history.HistoryEvent;
+import com.fmud.student.domain.history.StudentHistoryEvent;
 import com.fmud.student.domain.model.Student;
 import com.fmud.student.domain.model.StudentStatus;
 import com.fmud.student.infrastructure.exception.BadRequestException;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,15 +34,22 @@ import java.util.UUID;
 @Transactional
 public class StudentResumeService implements StudentResumeUseCase {
     private static final String NAME_PATTERN = "^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ -]+$";
+    private static final String PHONE_PATTERN = "^\\+?[0-9](?:[0-9 ]{4,18}[0-9])?$";
     private final StudentRepositoryPort students;
     private final DocumentRepositoryPort documents;
     private final HistoryRepositoryPort history;
+    private final com.fmud.student.application.port.out.EnrollmentRepositoryPort enrollments;
+    private final ResumeDetailsRepositoryPort details;
     private final FileStoragePort storage;
 
-    public StudentResumeService(StudentRepositoryPort students, DocumentRepositoryPort documents, HistoryRepositoryPort history, FileStoragePort storage) {
+    public StudentResumeService(StudentRepositoryPort students, DocumentRepositoryPort documents, HistoryRepositoryPort history,
+                                com.fmud.student.application.port.out.EnrollmentRepositoryPort enrollments, ResumeDetailsRepositoryPort details,
+                                FileStoragePort storage) {
         this.students = students;
         this.documents = documents;
         this.history = history;
+        this.enrollments = enrollments;
+        this.details = details;
         this.storage = storage;
     }
 
@@ -50,13 +60,14 @@ public class StudentResumeService implements StudentResumeUseCase {
             throw new BadRequestException("La cedula ya se encuentra registrada.");
         }
         Instant now = Instant.now();
-        FileStoragePort.StoredFile photo = command.photo() == null || command.photo().isEmpty() ? null : storage.storePhoto(command.photo());
         Student student = new Student(UUID.randomUUID(), clean(command.firstName()), clean(command.lastName()), command.documentNumber(),
                 command.birthDate(), clean(command.birthPlace()), clean(command.address()), clean(command.phone()), clean(command.email()),
-                photo == null ? null : photo.storageKey(), photo == null ? null : photo.contentType(),
                 command.status() == null ? StudentStatus.ACTIVE : command.status(), now, now);
         Student saved = students.save(student);
-        audit(saved.id(), actor, HistoryAction.STUDENT_CREATED, "STUDENT", saved.id(), "Estudiante creado.");
+        auditStudent(saved.id(), actor, HistoryAction.STUDENT_CREATED, "Estudiante creado.");
+        if (command.photo() != null && !command.photo().isEmpty()) {
+            savePhotoDocument(saved.id(), storage.storePhoto(command.photo()), actor, now, "Fotografia cargada.");
+        }
         return toDto(saved);
     }
 
@@ -67,13 +78,15 @@ public class StudentResumeService implements StudentResumeUseCase {
         if (students.existsByDocumentNumberAndIdNot(command.documentNumber(), id)) {
             throw new BadRequestException("La cedula ya se encuentra registrada.");
         }
-        FileStoragePort.StoredFile photo = command.photo() == null || command.photo().isEmpty() ? null : storage.storePhoto(command.photo());
         Student updated = new Student(current.id(), clean(command.firstName()), clean(command.lastName()), command.documentNumber(), command.birthDate(),
                 clean(command.birthPlace()), clean(command.address()), clean(command.phone()), clean(command.email()),
-                photo == null ? current.photoStorageKey() : photo.storageKey(), photo == null ? current.photoContentType() : photo.contentType(),
                 command.status() == null ? current.status() : command.status(), current.createdAt(), Instant.now());
         Student saved = students.save(updated);
-        audit(id, actor, HistoryAction.STUDENT_UPDATED, "STUDENT", id, "Informacion del estudiante actualizada.");
+        auditStudent(id, actor, HistoryAction.STUDENT_UPDATED, "Informacion del estudiante actualizada.");
+        if (command.photo() != null && !command.photo().isEmpty()) {
+            replaceActivePhoto(id, actor);
+            savePhotoDocument(id, storage.storePhoto(command.photo()), actor, Instant.now(), "Fotografia actualizada.");
+        }
         return toDto(saved);
     }
 
@@ -97,29 +110,44 @@ public class StudentResumeService implements StudentResumeUseCase {
         }
         Student current = getDomain(id);
         Student updated = new Student(current.id(), current.firstName(), current.lastName(), current.documentNumber(), current.birthDate(), current.birthPlace(),
-                current.address(), current.phone(), current.email(), current.photoStorageKey(), current.photoContentType(), status, current.createdAt(), Instant.now());
+                current.address(), current.phone(), current.email(), status, current.createdAt(), Instant.now());
         Student saved = students.save(updated);
-        audit(id, actor, HistoryAction.STUDENT_STATUS_CHANGED, "STUDENT", id, "Estado cambiado a " + status + ".");
+        auditStudent(id, actor, HistoryAction.STUDENT_STATUS_CHANGED, "Estado cambiado a " + status + ".");
         return toDto(saved);
     }
 
     @Override
     @Transactional(readOnly = true)
     public ResumeDto resume(UUID studentId) {
-        return new ResumeDto(get(studentId), listDocuments(studentId, null), history(studentId));
+        return new ResumeDto(get(studentId), details.findByStudentId(studentId), enrollments.findByStudentId(studentId).stream()
+                .map(enrollment -> new EnrollmentDto(enrollment.id(), enrollment.studentId(), enrollment.periodCode(), enrollment.program(),
+                        enrollment.status(), enrollment.createdAt(), enrollment.updatedAt()))
+                .toList(), listDocuments(studentId, null), history(studentId));
+    }
+
+    @Override
+    public ResumeDetailsDto updateDetails(UUID studentId, ResumeDetailsDto detail, ActorCommand actor) {
+        getDomain(studentId);
+        details.save(studentId, detail);
+        auditStudent(studentId, actor, HistoryAction.STUDENT_UPDATED, "Detalle completo de hoja de vida actualizado.");
+        return details.findByStudentId(studentId);
     }
 
     @Override
     public DocumentDto attachDocument(UUID studentId, DocumentCommand command, ActorCommand actor) {
         getDomain(studentId);
         validateDocument(command);
-        FileStoragePort.StoredFile file = storage.storeDocument(command.file());
+        String documentType = clean(command.documentType());
+        if ("PHOTO".equals(documentType)) {
+            replaceActivePhoto(studentId, actor);
+        }
+        FileStoragePort.StoredFile file = "PHOTO".equals(documentType) ? storage.storePhoto(command.file()) : storage.storeDocument(command.file());
         Instant now = Instant.now();
-        StudentDocument document = new StudentDocument(UUID.randomUUID(), studentId, clean(command.documentType()), clean(command.displayName()),
+        StudentDocument document = new StudentDocument(UUID.randomUUID(), studentId, documentType, clean(command.displayName()),
                 safeFilename(command.file().getOriginalFilename()), file.storageKey(), file.contentType(), file.size(), clean(command.description()),
-                DocumentStatus.ACTIVE, actor.userId(), actor.name(), now, now);
+                DocumentStatus.ACTIVE, actor.userId(), now, now);
         StudentDocument saved = documents.save(document);
-        audit(studentId, actor, HistoryAction.DOCUMENT_UPLOADED, "DOCUMENT", saved.id(), "Documento adjuntado: " + saved.displayName() + ".");
+        auditDocument(saved.id(), actor, HistoryAction.DOCUMENT_UPLOADED, "Documento adjuntado: " + saved.displayName() + ".");
         return toDto(saved);
     }
 
@@ -146,11 +174,20 @@ public class StudentResumeService implements StudentResumeUseCase {
         validateDocument(command);
         StudentDocument replaced = new StudentDocument(current.id(), current.studentId(), current.documentType(), current.displayName(), current.originalName(),
                 current.storageKey(), current.contentType(), current.size(), current.description(), DocumentStatus.REPLACED, current.uploadedByUserId(),
-                current.uploadedByName(), current.createdAt(), Instant.now());
+                current.createdAt(), Instant.now());
         documents.save(replaced);
-        DocumentDto saved = attachDocument(studentId, command, actor);
-        audit(studentId, actor, HistoryAction.DOCUMENT_REPLACED, "DOCUMENT", documentId, "Documento reemplazado.");
-        return saved;
+        String documentType = clean(command.documentType());
+        if ("PHOTO".equals(documentType)) {
+            replaceActivePhoto(studentId, actor);
+        }
+        FileStoragePort.StoredFile file = "PHOTO".equals(documentType) ? storage.storePhoto(command.file()) : storage.storeDocument(command.file());
+        Instant now = Instant.now();
+        StudentDocument document = new StudentDocument(UUID.randomUUID(), studentId, documentType, clean(command.displayName()),
+                safeFilename(command.file().getOriginalFilename()), file.storageKey(), file.contentType(), file.size(), clean(command.description()),
+                DocumentStatus.ACTIVE, actor.userId(), now, now);
+        StudentDocument saved = documents.save(document);
+        auditDocument(documentId, actor, HistoryAction.DOCUMENT_REPLACED, "Documento reemplazado.");
+        return toDto(saved);
     }
 
     @Override
@@ -161,25 +198,28 @@ public class StudentResumeService implements StudentResumeUseCase {
         StudentDocument current = document(studentId, documentId);
         documents.save(new StudentDocument(current.id(), current.studentId(), current.documentType(), current.displayName(), current.originalName(),
                 current.storageKey(), current.contentType(), current.size(), current.description(), DocumentStatus.DELETED, current.uploadedByUserId(),
-                current.uploadedByName(), current.createdAt(), Instant.now()));
-        audit(studentId, actor, HistoryAction.DOCUMENT_DELETED, "DOCUMENT", documentId, "Documento eliminado: " + current.displayName() + ".");
+                current.createdAt(), Instant.now()));
+        auditDocument(documentId, actor, HistoryAction.DOCUMENT_DELETED, "Documento eliminado: " + current.displayName() + ".");
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<HistoryEventDto> history(UUID studentId) {
         getDomain(studentId);
-        return history.findByStudentId(studentId).stream().map(this::toDto).toList();
+        List<HistoryEventDto> studentEvents = history.findStudentEventsByStudentId(studentId).stream().map(this::toDto).toList();
+        List<HistoryEventDto> documentEvents = history.findDocumentEventsByStudentId(studentId).stream().map(event -> toDto(studentId, event)).toList();
+        return java.util.stream.Stream.concat(studentEvents.stream(), documentEvents.stream())
+                .sorted(Comparator.comparing(HistoryEventDto::createdAt).reversed())
+                .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public FileResourceDto photo(UUID studentId) {
-        Student student = getDomain(studentId);
-        if (student.photoStorageKey() == null) {
-            throw new NotFoundException("El estudiante no tiene fotografia.");
-        }
-        return storage.loadPhoto(student.photoStorageKey(), student.photoContentType());
+        getDomain(studentId);
+        StudentDocument photo = documents.findActiveByStudentIdAndType(studentId, "PHOTO")
+                .orElseThrow(() -> new NotFoundException("El estudiante no tiene fotografia."));
+        return storage.loadPhoto(photo.storageKey(), photo.contentType());
     }
 
     private Student getDomain(UUID id) {
@@ -209,16 +249,23 @@ public class StudentResumeService implements StudentResumeUseCase {
         if (command.email() != null && !command.email().isBlank() && (command.email().length() > 150 || !command.email().contains("@"))) {
             throw new BadRequestException("El correo electronico no es valido.");
         }
-        if (command.phone() != null && !command.phone().isBlank() && !command.phone().matches("[0-9+]{1,20}")) {
-            throw new BadRequestException("El telefono solo puede contener numeros y el simbolo +.");
+        if (command.phone() != null && !command.phone().isBlank() && !command.phone().matches(PHONE_PATTERN)) {
+            throw new BadRequestException("El telefono solo puede contener digitos, espacios controlados y el simbolo + al inicio.");
         }
     }
 
     private void validateDocument(DocumentCommand command) {
         require(command.documentType(), "El tipo de documento es obligatorio.");
         require(command.displayName(), "El nombre visible es obligatorio.");
+        if (!List.of("PHOTO", "IDENTITY_DOCUMENT", "CIVIL_REGISTRY", "STUDY_CERTIFICATE", "HEALTH_AFFILIATION", "SIGNED_RESUME", "OTHER")
+                .contains(clean(command.documentType()))) {
+            throw new BadRequestException("El tipo de documento no es valido.");
+        }
         if (command.displayName().length() > 140) {
             throw new BadRequestException("El nombre visible no puede superar 140 caracteres.");
+        }
+        if (command.file() == null || command.file().isEmpty()) {
+            throw new BadRequestException("El archivo es obligatorio.");
         }
     }
 
@@ -239,22 +286,47 @@ public class StudentResumeService implements StudentResumeUseCase {
         return filename.replace("\\", "_").replace("/", "_");
     }
 
-    private void audit(UUID studentId, ActorCommand actor, HistoryAction action, String entityType, UUID entityId, String summary) {
-        history.save(new HistoryEvent(UUID.randomUUID(), studentId, actor.userId(), actor.name(), action, entityType, entityId, summary, Instant.now()));
+    private void replaceActivePhoto(UUID studentId, ActorCommand actor) {
+        documents.findActiveByStudentIdAndType(studentId, "PHOTO").ifPresent(current -> {
+            documents.save(new StudentDocument(current.id(), current.studentId(), current.documentType(), current.displayName(), current.originalName(),
+                    current.storageKey(), current.contentType(), current.size(), current.description(), DocumentStatus.REPLACED, current.uploadedByUserId(),
+                    current.createdAt(), Instant.now()));
+            auditDocument(current.id(), actor, HistoryAction.DOCUMENT_REPLACED, "Fotografia reemplazada.");
+        });
+    }
+
+    private StudentDocument savePhotoDocument(UUID studentId, FileStoragePort.StoredFile photo, ActorCommand actor, Instant now, String summary) {
+        StudentDocument document = new StudentDocument(UUID.randomUUID(), studentId, "PHOTO", "Fotografia", "fotografia",
+                photo.storageKey(), photo.contentType(), photo.size(), null, DocumentStatus.ACTIVE, actor.userId(), now, now);
+        StudentDocument saved = documents.save(document);
+        auditDocument(saved.id(), actor, HistoryAction.DOCUMENT_UPLOADED, summary);
+        return saved;
+    }
+
+    private void auditStudent(UUID studentId, ActorCommand actor, HistoryAction action, String summary) {
+        history.saveStudent(new StudentHistoryEvent(UUID.randomUUID(), studentId, actor.userId(), action, summary, Instant.now()));
+    }
+
+    private void auditDocument(UUID documentId, ActorCommand actor, HistoryAction action, String summary) {
+        history.saveDocument(new DocumentHistoryEvent(UUID.randomUUID(), documentId, actor.userId(), action, summary, Instant.now()));
     }
 
     private StudentDto toDto(Student student) {
-        String photoUrl = student.photoStorageKey() == null ? null : "/api/students/" + student.id() + "/photo";
+        String photoUrl = documents.findActiveByStudentIdAndType(student.id(), "PHOTO").isPresent() ? "/api/students/" + student.id() + "/photo" : null;
         return new StudentDto(student.id(), student.firstName(), student.lastName(), student.documentNumber(), student.birthDate(), student.birthPlace(),
                 student.address(), student.phone(), student.email(), photoUrl, student.status(), student.createdAt(), student.updatedAt());
     }
 
     private DocumentDto toDto(StudentDocument document) {
         return new DocumentDto(document.id(), document.studentId(), document.documentType(), document.displayName(), document.originalName(), document.contentType(),
-                document.size(), document.description(), document.status(), document.uploadedByUserId(), document.uploadedByName(), document.createdAt(), document.updatedAt());
+                document.size(), document.description(), document.status(), document.uploadedByUserId(), document.createdAt(), document.updatedAt());
     }
 
-    private HistoryEventDto toDto(HistoryEvent event) {
-        return new HistoryEventDto(event.id(), event.studentId(), event.actorUserId(), event.actorName(), event.action(), event.entityType(), event.entityId(), event.summary(), event.createdAt());
+    private HistoryEventDto toDto(StudentHistoryEvent event) {
+        return new HistoryEventDto(event.id(), event.studentId(), null, event.actorUserId(), event.action(), event.summary(), event.createdAt());
+    }
+
+    private HistoryEventDto toDto(UUID studentId, DocumentHistoryEvent event) {
+        return new HistoryEventDto(event.id(), studentId, event.documentId(), event.actorUserId(), event.action(), event.summary(), event.createdAt());
     }
 }

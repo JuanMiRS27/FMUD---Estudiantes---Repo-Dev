@@ -1,7 +1,11 @@
 package com.fmud.gateway.web;
 
 import com.fmud.gateway.configuration.GatewayProperties;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Part;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -14,6 +18,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,17 +28,27 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 public class GatewayController {
+    private static final Logger log = LoggerFactory.getLogger(GatewayController.class);
     private final RestClient restClient;
     private final GatewayProperties properties;
 
@@ -57,46 +72,14 @@ public class GatewayController {
         return forwardGet(properties.authServiceUrl() + "/api/auth/admin-check", request.getHeader(HttpHeaders.AUTHORIZATION), "/api/auth/admin-check");
     }
 
-    @PostMapping(path = "/api/students", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> createStudent(@RequestParam Map<String, String> params,
-                                                @RequestPart(required = false) MultipartFile photo,
-                                                HttpServletRequest request) {
-        Map<String, MultipartFile> files = new java.util.HashMap<>();
-        files.put("photo", photo);
-        return forwardMultipart(properties.studentServiceUrl() + "/api/students", params, files, request.getHeader(HttpHeaders.AUTHORIZATION), "/api/students");
-    }
-
-    @PutMapping(path = "/api/students/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> updateStudent(@org.springframework.web.bind.annotation.PathVariable String id,
-                                                @RequestParam Map<String, String> params,
-                                                @RequestPart(required = false) MultipartFile photo,
-                                                HttpServletRequest request) {
-        Map<String, MultipartFile> files = new java.util.HashMap<>();
-        files.put("photo", photo);
-        return forwardMultipart(properties.studentServiceUrl() + "/api/students/" + id, params, files, request.getHeader(HttpHeaders.AUTHORIZATION), "/api/students/" + id, HttpMethod.PUT);
-    }
-
-    @PostMapping(path = "/api/students/{studentId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> attachDocument(@org.springframework.web.bind.annotation.PathVariable String studentId,
-                                                 @RequestParam Map<String, String> params,
-                                                 @RequestPart MultipartFile file,
-                                                 HttpServletRequest request) {
-        return forwardMultipart(properties.studentServiceUrl() + "/api/students/" + studentId + "/documents", params, Map.of("file", file), request.getHeader(HttpHeaders.AUTHORIZATION), "/api/students/" + studentId + "/documents");
-    }
-
-    @PutMapping(path = "/api/students/{studentId}/documents/{documentId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> replaceDocument(@org.springframework.web.bind.annotation.PathVariable String studentId,
-                                                  @org.springframework.web.bind.annotation.PathVariable String documentId,
-                                                  @RequestParam Map<String, String> params,
-                                                  @RequestPart MultipartFile file,
-                                                  HttpServletRequest request) {
-        return forwardMultipart(properties.studentServiceUrl() + "/api/students/" + studentId + "/documents/" + documentId, params, Map.of("file", file),
-                request.getHeader(HttpHeaders.AUTHORIZATION), "/api/students/" + studentId + "/documents/" + documentId, HttpMethod.PUT);
-    }
-
-    @RequestMapping("/api/students/**")
+    @RequestMapping({"/api/students", "/api/students/**"})
     public ResponseEntity<byte[]> students(HttpServletRequest request) throws IOException {
         return forwardRaw(request, properties.studentServiceUrl());
+    }
+
+    @RequestMapping({"/api/users", "/api/users/**"})
+    public ResponseEntity<byte[]> users(HttpServletRequest request) throws IOException {
+        return forwardRaw(request, properties.authServiceUrl());
     }
 
     @GetMapping("/api/health")
@@ -115,6 +98,8 @@ public class GatewayController {
             return ResponseEntity.status(ex.getStatusCode()).contentType(MediaType.APPLICATION_JSON).body(ex.getResponseBodyAsString());
         } catch (ResourceAccessException ex) {
             return serviceUnavailable(path);
+        } catch (RestClientException ex) {
+            return serviceUnavailable(path);
         }
     }
 
@@ -129,6 +114,8 @@ public class GatewayController {
         } catch (RestClientResponseException ex) {
             return ResponseEntity.status(ex.getStatusCode()).contentType(MediaType.APPLICATION_JSON).body(ex.getResponseBodyAsString());
         } catch (ResourceAccessException ex) {
+            return serviceUnavailable(path);
+        } catch (RestClientException ex) {
             return serviceUnavailable(path);
         }
     }
@@ -159,36 +146,125 @@ public class GatewayController {
             return ResponseEntity.status(ex.getStatusCode()).contentType(MediaType.APPLICATION_JSON).body(ex.getResponseBodyAsString());
         } catch (ResourceAccessException ex) {
             return serviceUnavailable(path);
+        } catch (RestClientException ex) {
+            return serviceUnavailable(path);
         }
+    }
+
+    private ResponseEntity<byte[]> forwardMultipartHttpClient(String url, Map<String, String> params, Map<String, MultipartFile> files,
+                                                              String authorization, String path, String method) {
+        String boundary = "----fmud-" + UUID.randomUUID();
+        try {
+            byte[] body = multipartBody(params, files, boundary);
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(30))
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.MULTIPART_FORM_DATA_VALUE + "; boundary=" + boundary);
+            if (authorization != null) {
+                builder.header(HttpHeaders.AUTHORIZATION, authorization);
+            }
+            HttpResponse<byte[]> response = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build()
+                    .send(builder.method(method, HttpRequest.BodyPublishers.ofByteArray(body)).build(), HttpResponse.BodyHandlers.ofByteArray());
+            HttpHeaders responseHeaders = new HttpHeaders();
+            response.headers().firstValue(HttpHeaders.CONTENT_TYPE)
+                    .ifPresent(value -> responseHeaders.setContentType(MediaType.parseMediaType(value)));
+            response.headers().firstValue(HttpHeaders.CONTENT_DISPOSITION)
+                    .ifPresent(value -> responseHeaders.set(HttpHeaders.CONTENT_DISPOSITION, value));
+            return new ResponseEntity<>(response.body(), responseHeaders, HttpStatus.valueOf(response.statusCode()));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(serviceUnavailableJson(path).getBytes(StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(serviceUnavailableJson(path).getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private byte[] multipartBody(Map<String, String> params, Map<String, MultipartFile> files, String boundary) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (Map.Entry<String, String> param : params.entrySet()) {
+            writeTextPart(out, boundary, param.getKey(), param.getValue());
+        }
+        for (Map.Entry<String, MultipartFile> entry : files.entrySet()) {
+            MultipartFile file = entry.getValue();
+            if (file != null && !file.isEmpty()) {
+                writeFilePart(out, boundary, entry.getKey(), file);
+            }
+        }
+        out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        return out.toByteArray();
+    }
+
+    private void writeTextPart(ByteArrayOutputStream out, String boundary, String name, String value) throws IOException {
+        out.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+        out.write(("Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        out.write((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+        out.write("\r\n".getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void writeFilePart(ByteArrayOutputStream out, String boundary, String name, MultipartFile file) throws IOException {
+        out.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+        out.write(("Content-Disposition: form-data; name=\"" + name + "\"; filename=\"" + safeHeaderValue(file.getOriginalFilename()) + "\"\r\n").getBytes(StandardCharsets.UTF_8));
+        out.write(("Content-Type: " + (file.getContentType() == null ? MediaType.APPLICATION_OCTET_STREAM_VALUE : file.getContentType()) + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        out.write(file.getBytes());
+        out.write("\r\n".getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String safeHeaderValue(String value) {
+        return value == null ? "file" : value.replace("\r", "_").replace("\n", "_").replace("\"", "_");
     }
 
     private ResponseEntity<byte[]> forwardRaw(HttpServletRequest request, String upstreamBaseUrl) throws IOException {
         String requestUri = request.getRequestURI();
         String query = request.getQueryString() == null ? "" : "?" + request.getQueryString();
         String url = upstreamBaseUrl + requestUri + query;
-        HttpHeaders headers = new HttpHeaders();
-        Collections.list(request.getHeaderNames()).forEach(name -> {
-            if (!name.equalsIgnoreCase(HttpHeaders.HOST) && !name.equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)) {
-                headers.put(name, Collections.list(request.getHeaders(name)));
-            }
-        });
         byte[] body = request.getInputStream().readAllBytes();
         try {
-            ResponseEntity<byte[]> response = restClient.method(HttpMethod.valueOf(request.getMethod()))
-                    .uri(url)
-                    .headers(out -> out.addAll(headers))
-                    .body(body)
-                    .retrieve()
-                    .toEntity(byte[].class);
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(30));
+            Collections.list(request.getHeaderNames()).forEach(name -> {
+                if (!name.equalsIgnoreCase(HttpHeaders.HOST)
+                        && !name.equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)
+                        && !name.equalsIgnoreCase(HttpHeaders.CONNECTION)
+                        && !name.equalsIgnoreCase(HttpHeaders.EXPECT)
+                        && !name.equalsIgnoreCase(HttpHeaders.UPGRADE)) {
+                    Collections.list(request.getHeaders(name)).forEach(value -> builder.header(name, value));
+                }
+            });
+            HttpRequest.BodyPublisher publisher = body.length == 0 ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body);
+            HttpResponse<byte[]> response = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build()
+                    .send(builder.method(request.getMethod(), publisher).build(), HttpResponse.BodyHandlers.ofByteArray());
             HttpHeaders responseHeaders = new HttpHeaders();
-            responseHeaders.setContentType(response.getHeaders().getContentType());
-            responseHeaders.setContentDisposition(response.getHeaders().getContentDisposition());
-            return new ResponseEntity<>(response.getBody(), responseHeaders, response.getStatusCode());
+            response.headers().firstValue(HttpHeaders.CONTENT_TYPE)
+                    .ifPresent(value -> responseHeaders.setContentType(MediaType.parseMediaType(value)));
+            response.headers().firstValue(HttpHeaders.CONTENT_DISPOSITION)
+                    .ifPresent(value -> responseHeaders.set(HttpHeaders.CONTENT_DISPOSITION, value));
+            return new ResponseEntity<>(response.body(), responseHeaders, HttpStatus.valueOf(response.statusCode()));
         } catch (RestClientResponseException ex) {
             HttpHeaders responseHeaders = new HttpHeaders();
             responseHeaders.setContentType(MediaType.APPLICATION_JSON);
             return new ResponseEntity<>(ex.getResponseBodyAsByteArray(), responseHeaders, ex.getStatusCode());
-        } catch (ResourceAccessException ex) {
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            log.warn("Gateway raw proxy interrupted for {}", requestUri, ex);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(serviceUnavailableJson(requestUri).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (IOException ex) {
+            log.warn("Gateway raw proxy I/O error for {}", requestUri, ex);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(serviceUnavailableJson(requestUri).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (RuntimeException ex) {
+            log.warn("Gateway raw proxy runtime error for {}", requestUri, ex);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(serviceUnavailableJson(requestUri).getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -204,6 +280,30 @@ public class GatewayController {
 
     private ResponseEntity<String> serviceUnavailable(String path) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON).body(serviceUnavailableJson(path));
+    }
+
+    private Map<String, String> studentParams(StudentMultipartRequest form) {
+        Map<String, String> params = new java.util.LinkedHashMap<>();
+        params.put("firstName", form.firstName());
+        params.put("lastName", form.lastName());
+        params.put("documentNumber", form.documentNumber());
+        params.put("birthDate", form.birthDate());
+        params.put("birthPlace", form.birthPlace());
+        params.put("address", form.address());
+        params.put("phone", form.phone());
+        params.put("email", form.email());
+        params.put("status", form.status());
+        return params;
+    }
+
+    private Map<String, String> multipartParams(HttpServletRequest request) throws ServletException, IOException {
+        Map<String, String> params = new java.util.LinkedHashMap<>();
+        for (Part part : request.getParts()) {
+            if (part.getSubmittedFileName() == null) {
+                params.put(part.getName(), new String(part.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        return params;
     }
 
     private String serviceUnavailableJson(String path) {
@@ -242,5 +342,18 @@ public class GatewayController {
             headers.setContentType(MediaType.parseMediaType(file.getContentType()));
         }
         return new HttpEntity<>(new NamedByteArrayResource(file.getBytes(), file.getOriginalFilename()), headers);
+    }
+
+    private record StudentMultipartRequest(
+            String firstName,
+            String lastName,
+            String documentNumber,
+            String birthDate,
+            String birthPlace,
+            String address,
+            String phone,
+            String email,
+            String status
+    ) {
     }
 }

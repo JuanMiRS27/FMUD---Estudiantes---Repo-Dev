@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "student_documents")
+@Table(name = "student_documents", schema = "students")
 public class StudentDocumentEntity {
     @Id
     public UUID id;
@@ -29,11 +29,24 @@ public class StudentDocumentEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     public DocumentStatus status;
-    public UUID uploadedByUserId;
     @Column(nullable = false)
-    public String uploadedByName;
+    public UUID uploadedByUserId;
     @Column(nullable = false)
     public Instant createdAt;
     @Column(nullable = false)
     public Instant updatedAt;
+
+    @PrePersist
+    void prePersist() {
+        Instant now = Instant.now();
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = Instant.now();
+    }
 }

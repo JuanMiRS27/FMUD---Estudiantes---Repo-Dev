@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${AUTH_DB_URL:jdbc:postgresql://postgres:5432/${AUTH_DB_NAME:fmud_auth}}
+    url: ${AUTH_DB_URL:jdbc:postgresql://postgres:5432/${POSTGRES_DB:fmud}}
     username: ${AUTH_DB_USER:${POSTGRES_USER:fmud_user}}
     password: ${AUTH_DB_PASSWORD:${POSTGRES_PASSWORD:change_me}}
   flyway:

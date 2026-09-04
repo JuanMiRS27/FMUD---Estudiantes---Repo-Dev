@@ -4,12 +4,14 @@ import com.fmud.student.application.command.ActorCommand;
 import com.fmud.student.application.command.StudentCommand;
 import com.fmud.student.application.dto.FileResourceDto;
 import com.fmud.student.application.dto.PageResponse;
+import com.fmud.student.application.dto.ResumeDetailsDto;
 import com.fmud.student.application.dto.ResumeDto;
 import com.fmud.student.application.dto.StudentDto;
 import com.fmud.student.application.port.in.StudentResumeUseCase;
 import com.fmud.student.domain.model.StudentStatus;
 import com.fmud.student.infrastructure.security.JwtPrincipal;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -54,13 +56,18 @@ public class StudentController {
     }
 
     @PatchMapping("/{id}/status")
-    public StudentDto status(@PathVariable UUID id, @RequestBody StatusRequest request, Authentication authentication) {
+    public StudentDto status(@PathVariable UUID id, @Valid @RequestBody StatusRequest request, Authentication authentication) {
         return useCase.changeStatus(id, request.status(), actor(authentication));
     }
 
     @GetMapping("/{id}/resume")
     public ResumeDto resume(@PathVariable UUID id) {
         return useCase.resume(id);
+    }
+
+    @PutMapping("/{id}/resume/details")
+    public ResumeDetailsDto updateResumeDetails(@PathVariable UUID id, @RequestBody ResumeDetailsDto request, Authentication authentication) {
+        return useCase.updateDetails(id, request, actor(authentication));
     }
 
     @GetMapping("/{id}/history")
@@ -90,6 +97,6 @@ public class StudentController {
                 .body(file.resource());
     }
 
-    public record StatusRequest(StudentStatus status) {
+    public record StatusRequest(@NotNull(message = "El estado es obligatorio.") StudentStatus status) {
     }
 }

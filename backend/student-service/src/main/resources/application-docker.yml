@@ -4,6 +4,10 @@ logging:
 
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/${STUDENT_DB_NAME:fmud_students}
+    url: ${STUDENT_DB_URL:jdbc:postgresql://postgres:5432/${POSTGRES_DB:fmud}}
     username: ${STUDENT_DB_USER:${POSTGRES_USER:fmud_user}}
     password: ${STUDENT_DB_PASSWORD:${POSTGRES_PASSWORD:change_me}}
+  flyway:
+    default-schema: students
+    schemas: students
+    table: student_flyway_schema_history

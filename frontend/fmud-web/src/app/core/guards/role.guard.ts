@@ -12,5 +12,5 @@ export const roleGuard: CanActivateFn = (route) => {
   if (!user) {
     return router.createUrlTree(['/login']);
   }
-  return allowed.length === 0 || allowed.includes(user.role) ? true : router.createUrlTree(['/dashboard']);
+  return allowed.length === 0 || allowed.includes(user.role) ? true : router.createUrlTree(['/hojas-de-vida']);
 };

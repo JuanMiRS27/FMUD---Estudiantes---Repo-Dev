@@ -1,5 +1,6 @@
 export type StudentStatus = 'ACTIVE' | 'INACTIVE';
 export type DocumentStatus = 'ACTIVE' | 'REPLACED' | 'DELETED';
+export type EnrollmentStatus = 'ENROLLED' | 'WITHDRAWN' | 'COMPLETED';
 
 export interface Student {
   id: string;
@@ -15,6 +16,22 @@ export interface Student {
   status: StudentStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ResumeDetails {
+  personal: Record<string, unknown>;
+  socioeconomic: Record<string, unknown>;
+  academic: Record<string, unknown>;
+  motivation: Record<string, unknown>;
+  availability: Record<string, unknown>;
+  foundationKnowledge: Record<string, unknown>;
+  authorizations: Record<string, unknown>;
+  health: Record<string, unknown>;
+  riskFactors: Record<string, unknown>;
+  academicPerformance: Record<string, unknown>;
+  programKnowledge: Record<string, unknown>;
+  institutionalCommitment: Record<string, unknown>;
+  declaration: Record<string, unknown>;
 }
 
 export interface PageResponse<T> {
@@ -35,22 +52,35 @@ export interface StudentDocument {
   size: number;
   description: string | null;
   status: DocumentStatus;
-  uploadedByName: string;
+  uploadedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Enrollment {
+  id: string;
+  studentId: string;
+  periodCode: string;
+  program: string;
+  status: EnrollmentStatus;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface HistoryEvent {
   id: string;
+  studentId: string;
+  documentId: string | null;
+  actorUserId: string;
   action: string;
-  actorName: string;
-  entityType: string;
   summary: string;
   createdAt: string;
 }
 
 export interface Resume {
   student: Student;
+  details: ResumeDetails;
+  enrollments: Enrollment[];
   documents: StudentDocument[];
   history: HistoryEvent[];
 }
@@ -65,4 +95,10 @@ export interface StudentFormValue {
   phone: string;
   email: string;
   status: StudentStatus;
+}
+
+export interface EnrollmentFormValue {
+  periodCode: string;
+  program: string;
+  status: EnrollmentStatus;
 }

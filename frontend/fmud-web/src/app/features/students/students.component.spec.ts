@@ -35,7 +35,7 @@ describe('StudentsComponent', () => {
     });
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('CC: 12345678');
+    expect(fixture.nativeElement.textContent).toContain('12345678');
 
     fixture.componentInstance.filters.controls.search.setValue('Ana');
     fixture.componentInstance.search();

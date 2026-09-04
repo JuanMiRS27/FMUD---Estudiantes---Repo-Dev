@@ -8,11 +8,9 @@ import java.util.UUID;
 public record HistoryEventDto(
         UUID id,
         UUID studentId,
+        UUID documentId,
         UUID actorUserId,
-        String actorName,
         HistoryAction action,
-        String entityType,
-        UUID entityId,
         String summary,
         Instant createdAt
 ) {

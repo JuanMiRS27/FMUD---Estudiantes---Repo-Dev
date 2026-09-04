@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from '../../auth/auth.service';
 import { SidebarService } from '../../services/sidebar.service';
 
 @Component({
@@ -16,28 +17,25 @@ import { SidebarService } from '../../services/sidebar.service';
       </button>
 
       <nav class="nav-menu" aria-label="Navegacion principal">
-        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item" title="Dashboard" (click)="sidebar.closeMobile()">
-          <span class="nav-icon" aria-hidden="true">D</span>
-          @if (!sidebar.collapsed()) {
-            <span>Dashboard</span>
-          }
-        </a>
-        <a routerLink="/students" routerLinkActive="active" class="nav-item" title="Estudiantes" (click)="sidebar.closeMobile()">
-          <span class="nav-icon" aria-hidden="true">E</span>
-          @if (!sidebar.collapsed()) {
-            <span>Estudiantes</span>
-          }
-        </a>
-        <a routerLink="/students" routerLinkActive="active" class="nav-item" title="Hojas de Vida" (click)="sidebar.closeMobile()">
-          <span class="nav-icon" aria-hidden="true">H</span>
+        <a routerLink="/hojas-de-vida" routerLinkActive="active" class="nav-item" title="Hojas de Vida" (click)="sidebar.closeMobile()">
+          <span class="nav-icon" aria-hidden="true">HV</span>
           @if (!sidebar.collapsed()) {
             <span>Hojas de Vida</span>
           }
         </a>
+        @if (auth.user()?.role === 'ADMIN') {
+          <a routerLink="/users" routerLinkActive="active" class="nav-item" title="Usuarios" (click)="sidebar.closeMobile()">
+            <span class="nav-icon" aria-hidden="true">US</span>
+            @if (!sidebar.collapsed()) {
+              <span>Usuarios</span>
+            }
+          </a>
+        }
       </nav>
     </aside>
   `
 })
 export class SidebarComponent {
   readonly sidebar = inject(SidebarService);
+  readonly auth = inject(AuthService);
 }

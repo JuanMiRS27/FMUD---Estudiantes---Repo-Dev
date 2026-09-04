@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
-@Table(name = "students")
+@Table(name = "students", schema = "students")
 public class StudentEntity {
     @Id
     public UUID id;
@@ -24,8 +24,6 @@ public class StudentEntity {
     public String address;
     public String phone;
     public String email;
-    public String photoStorageKey;
-    public String photoContentType;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     public StudentStatus status;
@@ -33,4 +31,18 @@ public class StudentEntity {
     public Instant createdAt;
     @Column(nullable = false)
     public Instant updatedAt;
+
+    @PrePersist
+    void prePersist() {
+        Instant now = Instant.now();
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = Instant.now();
+    }
 }

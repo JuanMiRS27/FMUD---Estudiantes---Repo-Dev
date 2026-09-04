@@ -1,12 +1,17 @@
 package com.fmud.student.application.port.out;
 
-import com.fmud.student.domain.history.HistoryEvent;
+import com.fmud.student.domain.history.DocumentHistoryEvent;
+import com.fmud.student.domain.history.StudentHistoryEvent;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface HistoryRepositoryPort {
-    HistoryEvent save(HistoryEvent event);
+    StudentHistoryEvent saveStudent(StudentHistoryEvent event);
 
-    List<HistoryEvent> findByStudentId(UUID studentId);
+    DocumentHistoryEvent saveDocument(DocumentHistoryEvent event);
+
+    List<StudentHistoryEvent> findStudentEventsByStudentId(UUID studentId);
+
+    List<DocumentHistoryEvent> findDocumentEventsByStudentId(UUID studentId);
 }

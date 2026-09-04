@@ -22,6 +22,8 @@ public interface StudentResumeUseCase {
 
     ResumeDto resume(UUID studentId);
 
+    ResumeDetailsDto updateDetails(UUID studentId, ResumeDetailsDto details, ActorCommand actor);
+
     DocumentDto attachDocument(UUID studentId, DocumentCommand command, ActorCommand actor);
 
     java.util.List<DocumentDto> listDocuments(UUID studentId, String type);

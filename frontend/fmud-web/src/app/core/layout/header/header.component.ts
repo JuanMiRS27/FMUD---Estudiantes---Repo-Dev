@@ -11,12 +11,12 @@ import { SidebarService } from '../../services/sidebar.service';
   template: `
     <header class="topbar">
       <button class="icon-button mobile-menu" type="button" aria-label="Abrir menu" (click)="sidebar.openMobile()">
-        <span aria-hidden="true">M</span>
+        <span aria-hidden="true">☰</span>
       </button>
 
       <div>
         <p class="section-kicker">Panel institucional</p>
-        <h1>Dashboard</h1>
+        <h1>Plataforma FMUD</h1>
       </div>
 
       @if (user(); as currentUser) {
@@ -59,8 +59,8 @@ import { SidebarService } from '../../services/sidebar.service';
               <div class="menu-divider"></div>
 
               <button class="menu-option danger-option" type="button" role="menuitem" (click)="logout()">
-                <span class="menu-icon" aria-hidden="true">S</span>
-                <span>Cerrar sesi&oacute;n</span>
+                <span class="menu-icon" aria-hidden="true">-></span>
+                <span>Cerrar sesion</span>
               </button>
             </div>
           }

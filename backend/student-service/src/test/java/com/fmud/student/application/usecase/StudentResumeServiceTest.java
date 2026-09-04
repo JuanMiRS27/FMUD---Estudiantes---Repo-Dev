@@ -4,13 +4,17 @@ import com.fmud.student.application.command.ActorCommand;
 import com.fmud.student.application.command.DocumentCommand;
 import com.fmud.student.application.command.StudentCommand;
 import com.fmud.student.application.dto.FileResourceDto;
+import com.fmud.student.application.dto.ResumeDetailsDto;
 import com.fmud.student.application.port.out.DocumentRepositoryPort;
 import com.fmud.student.application.port.out.FileStoragePort;
 import com.fmud.student.application.port.out.HistoryRepositoryPort;
+import com.fmud.student.application.port.out.ResumeDetailsRepositoryPort;
 import com.fmud.student.application.port.out.StudentRepositoryPort;
 import com.fmud.student.domain.document.DocumentStatus;
 import com.fmud.student.domain.document.StudentDocument;
-import com.fmud.student.domain.history.HistoryEvent;
+import com.fmud.student.domain.enrollment.Enrollment;
+import com.fmud.student.domain.history.DocumentHistoryEvent;
+import com.fmud.student.domain.history.StudentHistoryEvent;
 import com.fmud.student.domain.model.Student;
 import com.fmud.student.domain.model.StudentStatus;
 import com.fmud.student.infrastructure.exception.BadRequestException;
@@ -32,8 +36,10 @@ class StudentResumeServiceTest {
     private final InMemoryStudents students = new InMemoryStudents();
     private final InMemoryDocuments documents = new InMemoryDocuments();
     private final InMemoryHistory history = new InMemoryHistory();
+    private final InMemoryEnrollments enrollments = new InMemoryEnrollments();
+    private final InMemoryResumeDetails details = new InMemoryResumeDetails();
     private final FakeStorage storage = new FakeStorage();
-    private final StudentResumeService service = new StudentResumeService(students, documents, history, storage);
+    private final StudentResumeService service = new StudentResumeService(students, documents, history, enrollments, details, storage);
     private final ActorCommand admin = new ActorCommand(UUID.randomUUID(), "Admin", "ADMIN");
     private final ActorCommand secretary = new ActorCommand(UUID.randomUUID(), "Secretaria", "SECRETARIO");
 
@@ -56,10 +62,49 @@ class StudentResumeServiceTest {
     }
 
     @Test
+    void updatesStudentWithPhoneFormatAllowedByFrontend() {
+        var student = service.create(validStudent("12345678"), admin);
+
+        var updated = service.update(student.id(), new StudentCommand("Ana Maria", "Perez Gomez", "12345678", LocalDate.of(2012, 3, 4),
+                "Bogota", "Calle 1", "+57 300 111 2233", "ana@example.com", StudentStatus.ACTIVE, null), secretary);
+
+        assertThat(updated.phone()).isEqualTo("+57 300 111 2233");
+        assertThat(service.history(student.id())).extracting("summary").contains("Informacion del estudiante actualizada.");
+    }
+
+    @Test
+    void savesAndReadsCompleteResumeDetails() {
+        var student = service.create(validStudent("12345678"), admin);
+        var detail = new ResumeDetailsDto(
+                Map.of("documentType", "Cedula de ciudadania", "municipality", "Bogota"),
+                Map.of("currentlyWorks", "Si", "company", "Fundacion"),
+                Map.of("internetAccess", "Si"),
+                Map.of("scholarshipReason", "Proyecto de vida"),
+                Map.of("availableForClasses", "Si"),
+                Map.of("knewFoundationBefore", "No"),
+                Map.of("personalDataProcessing", "Si"),
+                Map.of("diagnosedDisease", "No"),
+                Map.of("tobaccoUse", "No"),
+                Map.of("strengthAreas", List.of("Matematicas")),
+                Map.of("nursingUnderstanding", "Cuidado humanizado"),
+                Map.of("studentRulesCommitment", "Si"),
+                Map.of("truthfulCompleteInformation", "Si")
+        );
+
+        service.updateDetails(student.id(), detail, secretary);
+        var resume = service.resume(student.id());
+
+        assertThat(resume.details().personal()).containsEntry("documentType", "Cedula de ciudadania");
+        assertThat(resume.details().socioeconomic()).containsEntry("company", "Fundacion");
+        assertThat(resume.details().academicPerformance()).containsEntry("strengthAreas", List.of("Matematicas"));
+        assertThat(service.history(student.id())).extracting("summary").contains("Detalle completo de hoja de vida actualizado.");
+    }
+
+    @Test
     void secretaryCannotDeleteDocumentButAdminCan() {
         var student = service.create(validStudent("12345678"), admin);
         var file = new MockMultipartFile("file", "doc.pdf", "application/pdf", "abc".getBytes());
-        var document = service.attachDocument(student.id(), new DocumentCommand("Documento de identidad", "Cedula", "", file), secretary);
+        var document = service.attachDocument(student.id(), new DocumentCommand("IDENTITY_DOCUMENT", "Cedula", "", file), secretary);
 
         assertThatThrownBy(() -> service.deleteDocument(student.id(), document.id(), secretary)).isInstanceOf(ForbiddenException.class);
 
@@ -109,21 +154,84 @@ class StudentResumeServiceTest {
             return Optional.ofNullable(rows.get(id)).filter(document -> document.studentId().equals(studentId));
         }
 
+        public Optional<StudentDocument> findActiveByStudentIdAndType(UUID studentId, String type) {
+            return rows.values().stream()
+                    .filter(document -> document.studentId().equals(studentId) && document.status() == DocumentStatus.ACTIVE && document.documentType().equals(type))
+                    .findFirst();
+        }
+
         public List<StudentDocument> findActiveByStudentId(UUID studentId, String type) {
-            return rows.values().stream().filter(document -> document.studentId().equals(studentId) && document.status() == DocumentStatus.ACTIVE).toList();
+            return rows.values().stream()
+                    .filter(document -> document.studentId().equals(studentId) && document.status() == DocumentStatus.ACTIVE)
+                    .filter(document -> type == null || type.isBlank() || document.documentType().equals(type))
+                    .toList();
         }
     }
 
     private static final class InMemoryHistory implements HistoryRepositoryPort {
-        private final List<HistoryEvent> rows = new ArrayList<>();
+        private final List<StudentHistoryEvent> studentRows = new ArrayList<>();
+        private final List<DocumentHistoryEvent> documentRows = new ArrayList<>();
 
-        public HistoryEvent save(HistoryEvent event) {
-            rows.add(event);
+        public StudentHistoryEvent saveStudent(StudentHistoryEvent event) {
+            studentRows.add(event);
             return event;
         }
 
-        public List<HistoryEvent> findByStudentId(UUID studentId) {
-            return rows.stream().filter(event -> event.studentId().equals(studentId)).toList();
+        public DocumentHistoryEvent saveDocument(DocumentHistoryEvent event) {
+            documentRows.add(event);
+            return event;
+        }
+
+        public List<StudentHistoryEvent> findStudentEventsByStudentId(UUID studentId) {
+            return studentRows.stream().filter(event -> event.studentId().equals(studentId)).toList();
+        }
+
+        public List<DocumentHistoryEvent> findDocumentEventsByStudentId(UUID studentId) {
+            return documentRows;
+        }
+    }
+
+    private static final class InMemoryEnrollments implements com.fmud.student.application.port.out.EnrollmentRepositoryPort {
+        private final Map<UUID, Enrollment> rows = new LinkedHashMap<>();
+
+        public Enrollment save(Enrollment enrollment) {
+            rows.put(enrollment.id(), enrollment);
+            return enrollment;
+        }
+
+        public Optional<Enrollment> findByIdAndStudentId(UUID id, UUID studentId) {
+            return Optional.ofNullable(rows.get(id)).filter(enrollment -> enrollment.studentId().equals(studentId));
+        }
+
+        public List<Enrollment> findByStudentId(UUID studentId) {
+            return rows.values().stream().filter(enrollment -> enrollment.studentId().equals(studentId)).toList();
+        }
+
+        public boolean existsByStudentIdAndPeriodCode(UUID studentId, String periodCode) {
+            return rows.values().stream().anyMatch(enrollment -> enrollment.studentId().equals(studentId) && enrollment.periodCode().equals(periodCode));
+        }
+
+        public boolean existsByStudentIdAndPeriodCodeAndIdNot(UUID studentId, String periodCode, UUID id) {
+            return rows.values().stream().anyMatch(enrollment -> enrollment.studentId().equals(studentId)
+                    && enrollment.periodCode().equals(periodCode)
+                    && !enrollment.id().equals(id));
+        }
+    }
+
+    private static final class InMemoryResumeDetails implements ResumeDetailsRepositoryPort {
+        private final Map<UUID, ResumeDetailsDto> rows = new LinkedHashMap<>();
+
+        public ResumeDetailsDto findByStudentId(UUID studentId) {
+            return rows.getOrDefault(studentId, empty());
+        }
+
+        public void save(UUID studentId, ResumeDetailsDto details) {
+            rows.put(studentId, details);
+        }
+
+        private ResumeDetailsDto empty() {
+            return new ResumeDetailsDto(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
+                    Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
         }
     }
 

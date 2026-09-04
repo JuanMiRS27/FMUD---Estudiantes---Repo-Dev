@@ -11,7 +11,7 @@ spring:
       max-file-size: ${MAX_DOCUMENT_SIZE_MB:10}MB
       max-request-size: ${MAX_DOCUMENT_SIZE_MB:10}MB
   datasource:
-    url: ${STUDENT_DB_URL:jdbc:postgresql://localhost:5432/fmud_students}
+    url: ${STUDENT_DB_URL:jdbc:postgresql://localhost:5432/fmud}
     username: ${STUDENT_DB_USER:fmud_user}
     password: ${STUDENT_DB_PASSWORD:change_me}
   jpa:
