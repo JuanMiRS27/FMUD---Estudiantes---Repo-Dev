@@ -76,27 +76,27 @@ class StudentResumeServiceTest {
     void savesAndReadsCompleteResumeDetails() {
         var student = service.create(validStudent("12345678"), admin);
         var detail = new ResumeDetailsDto(
-                Map.of("documentType", "Cedula de ciudadania", "municipality", "Bogota"),
-                Map.of("currentlyWorks", "Si", "company", "Fundacion"),
-                Map.of("internetAccess", "Si"),
-                Map.of("scholarshipReason", "Proyecto de vida"),
-                Map.of("availableForClasses", "Si"),
-                Map.of("knewFoundationBefore", "No"),
-                Map.of("personalDataProcessing", "Si"),
-                Map.of("diagnosedDisease", "No"),
-                Map.of("tobaccoUse", "No"),
-                Map.of("strengthAreas", List.of("Matematicas")),
-                Map.of("nursingUnderstanding", "Cuidado humanizado"),
-                Map.of("studentRulesCommitment", "Si"),
-                Map.of("truthfulCompleteInformation", "Si")
+                new ResumeDetailsDto.PersonalInfoDto("Cedula de ciudadania", "Bogota", null, null, null, null, null, null),
+                new ResumeDetailsDto.SocioeconomicInfoDto(null, null, null, null, null, null, null, true, "Fundacion", null, null, null, null),
+                new ResumeDetailsDto.AcademicInfoDto(null, null, null, null, null, null, true, null),
+                new ResumeDetailsDto.MotivationInfoDto("Proyecto de vida", null, null, null, null, null),
+                new ResumeDetailsDto.AvailabilityInfoDto(true, null, null, null, null, null),
+                new ResumeDetailsDto.FoundationKnowledgeInfoDto(List.of(), false, null),
+                new ResumeDetailsDto.AuthorizationsInfoDto(true, null, null),
+                new ResumeDetailsDto.HealthInfoDto(false, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, List.of(), null, null, null, null, null, null, null, null, null, null),
+                new ResumeDetailsDto.RiskFactorsInfoDto("No", null, null, null, null, null, null, null, null, null, null),
+                new ResumeDetailsDto.AcademicPerformanceInfoDto(null, List.of("Matematicas"), List.of(), null, null, null, null, null, null, null, null),
+                new ResumeDetailsDto.ProgramKnowledgeInfoDto("Cuidado humanizado", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                new ResumeDetailsDto.InstitutionalCommitmentInfoDto(null, null, List.of(), null, null, true, null, null, null, null, null, null),
+                new ResumeDetailsDto.DeclarationInfoDto(true, null, null, null, null)
         );
 
         service.updateDetails(student.id(), detail, secretary);
         var resume = service.resume(student.id());
 
-        assertThat(resume.details().personal()).containsEntry("documentType", "Cedula de ciudadania");
-        assertThat(resume.details().socioeconomic()).containsEntry("company", "Fundacion");
-        assertThat(resume.details().academicPerformance()).containsEntry("strengthAreas", List.of("Matematicas"));
+        assertThat(resume.details().personal().documentType()).isEqualTo("Cedula de ciudadania");
+        assertThat(resume.details().socioeconomic().company()).isEqualTo("Fundacion");
+        assertThat(resume.details().academicPerformance().strengthAreas()).containsExactly("Matematicas");
         assertThat(service.history(student.id())).extracting("summary").contains("Detalle completo de hoja de vida actualizado.");
     }
 
@@ -230,8 +230,7 @@ class StudentResumeServiceTest {
         }
 
         private ResumeDetailsDto empty() {
-            return new ResumeDetailsDto(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
-                    Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+            return new ResumeDetailsDto(null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
     }
 

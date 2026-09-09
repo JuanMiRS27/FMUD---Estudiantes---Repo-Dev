@@ -602,6 +602,7 @@ export class ResumeComponent {
     this.service.resume(this.studentId).pipe(finalize(() => this.loading.set(false))).subscribe({
       next: (resume) => {
         this.resume.set(resume);
+        const normalizedDetails = this.detailsForForm(resume.details);
         this.form.patchValue({
           student: {
             firstName: resume.student.firstName,
@@ -613,9 +614,9 @@ export class ResumeComponent {
             phone: resume.student.phone ?? '',
             email: resume.student.email ?? '',
             status: resume.student.status,
-            ...(resume.details.personal ?? {})
+            ...(normalizedDetails['personal'] ?? {})
           },
-          ...resume.details
+          ...normalizedDetails
         });
         this.patchDeclaration();
       },
@@ -889,19 +890,19 @@ export class ResumeComponent {
   private detailsPayload(): ResumeDetails {
     const raw = this.form.getRawValue() as unknown as Record<string, Record<string, unknown>>;
     return {
-      personal: this.mergePersonal(raw['student']),
-      socioeconomic: raw['socioeconomic'] ?? {},
-      academic: raw['academic'] ?? {},
-      motivation: raw['motivation'] ?? {},
-      availability: raw['availability'] ?? {},
-      foundationKnowledge: raw['foundationKnowledge'] ?? {},
-      authorizations: raw['authorizations'] ?? {},
-      health: raw['health'] ?? {},
-      riskFactors: raw['riskFactors'] ?? {},
-      academicPerformance: raw['academicPerformance'] ?? {},
-      programKnowledge: raw['programKnowledge'] ?? {},
-      institutionalCommitment: raw['institutionalCommitment'] ?? {},
-      declaration: raw['declaration'] ?? {}
+      personal: this.sectionForApi('student', this.mergePersonal(raw['student'])) as unknown as ResumeDetails['personal'],
+      socioeconomic: this.sectionForApi('socioeconomic', raw['socioeconomic'] ?? {}) as unknown as ResumeDetails['socioeconomic'],
+      academic: this.sectionForApi('academic', raw['academic'] ?? {}) as unknown as ResumeDetails['academic'],
+      motivation: this.sectionForApi('motivation', raw['motivation'] ?? {}) as unknown as ResumeDetails['motivation'],
+      availability: this.sectionForApi('availability', raw['availability'] ?? {}) as unknown as ResumeDetails['availability'],
+      foundationKnowledge: this.sectionForApi('foundationKnowledge', raw['foundationKnowledge'] ?? {}) as unknown as ResumeDetails['foundationKnowledge'],
+      authorizations: this.sectionForApi('authorizations', raw['authorizations'] ?? {}) as unknown as ResumeDetails['authorizations'],
+      health: this.sectionForApi('health', raw['health'] ?? {}) as unknown as ResumeDetails['health'],
+      riskFactors: this.sectionForApi('riskFactors', raw['riskFactors'] ?? {}) as unknown as ResumeDetails['riskFactors'],
+      academicPerformance: this.sectionForApi('academicPerformance', raw['academicPerformance'] ?? {}) as unknown as ResumeDetails['academicPerformance'],
+      programKnowledge: this.sectionForApi('programKnowledge', raw['programKnowledge'] ?? {}) as unknown as ResumeDetails['programKnowledge'],
+      institutionalCommitment: this.sectionForApi('institutionalCommitment', raw['institutionalCommitment'] ?? {}) as unknown as ResumeDetails['institutionalCommitment'],
+      declaration: this.sectionForApi('declaration', raw['declaration'] ?? {}) as unknown as ResumeDetails['declaration']
     };
   }
 
@@ -924,6 +925,88 @@ export class ResumeComponent {
       applicantName: `${student['firstName'] ?? ''} ${student['lastName'] ?? ''}`.trim(),
       identityDocument: student['documentNumber'] ?? ''
     }, { emitEvent: false });
+  }
+
+  private detailsForForm(details: ResumeDetails): Record<string, Record<string, unknown>> {
+    return {
+      personal: this.sectionForForm('student', this.toRecord(details.personal)),
+      socioeconomic: this.sectionForForm('socioeconomic', this.toRecord(details.socioeconomic)),
+      academic: this.sectionForForm('academic', this.toRecord(details.academic)),
+      motivation: this.sectionForForm('motivation', this.toRecord(details.motivation)),
+      availability: this.sectionForForm('availability', this.toRecord(details.availability)),
+      foundationKnowledge: this.sectionForForm('foundationKnowledge', this.toRecord(details.foundationKnowledge)),
+      authorizations: this.sectionForForm('authorizations', this.toRecord(details.authorizations)),
+      health: this.sectionForForm('health', this.toRecord(details.health)),
+      riskFactors: this.sectionForForm('riskFactors', this.toRecord(details.riskFactors)),
+      academicPerformance: this.sectionForForm('academicPerformance', this.toRecord(details.academicPerformance)),
+      programKnowledge: this.sectionForForm('programKnowledge', this.toRecord(details.programKnowledge)),
+      institutionalCommitment: this.sectionForForm('institutionalCommitment', this.toRecord(details.institutionalCommitment)),
+      declaration: this.sectionForForm('declaration', this.toRecord(details.declaration))
+    };
+  }
+
+  private sectionForForm(sectionKey: Section['key'], values: Record<string, unknown>): Record<string, unknown> {
+    const section = SECTIONS.find((candidate) => candidate.key === sectionKey);
+    if (!section) {
+      return values;
+    }
+    const converted: Record<string, unknown> = {};
+    for (const field of section.fields) {
+      if (field.type === 'readonly') {
+        continue;
+      }
+      const value = values[field.key];
+      converted[field.key] = this.isYesNo(field) ? this.booleanToYesNo(value) : value ?? (field.type === 'checkboxes' ? [] : '');
+    }
+    return converted;
+  }
+
+  private sectionForApi(sectionKey: Section['key'], values: Record<string, unknown>): Record<string, unknown> {
+    const section = SECTIONS.find((candidate) => candidate.key === sectionKey);
+    if (!section) {
+      return values;
+    }
+    const converted: Record<string, unknown> = {};
+    for (const field of section.fields) {
+      if (field.type === 'readonly') {
+        continue;
+      }
+      const value = values[field.key];
+      converted[field.key] = this.isYesNo(field) ? this.yesNoToBoolean(value) : this.emptyToNull(value);
+    }
+    return converted;
+  }
+
+  private isYesNo(field: Field): boolean {
+    return field.type === 'radio' && field.options?.length === 2 && field.options.includes('Si') && field.options.includes('No');
+  }
+
+  private booleanToYesNo(value: unknown): string {
+    if (value === true) {
+      return 'Si';
+    }
+    if (value === false) {
+      return 'No';
+    }
+    return '';
+  }
+
+  private yesNoToBoolean(value: unknown): boolean | null {
+    if (value === 'Si') {
+      return true;
+    }
+    if (value === 'No') {
+      return false;
+    }
+    return null;
+  }
+
+  private emptyToNull(value: unknown): unknown {
+    return typeof value === 'string' && value.trim() === '' ? null : value;
+  }
+
+  private toRecord(value: unknown): Record<string, unknown> {
+    return (value ?? {}) as Record<string, unknown>;
   }
 
   private calculateAge(value: string): string {
