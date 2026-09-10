@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { finalize, switchMap, tap } from 'rxjs';
+import { finalize, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { ApiError } from '../../core/models/auth.model';
 import { NotificationService } from '../../core/services/notification.service';
@@ -600,26 +600,7 @@ export class ResumeComponent {
     this.loading.set(true);
     this.error.set(false);
     this.service.resume(this.studentId).pipe(finalize(() => this.loading.set(false))).subscribe({
-      next: (resume) => {
-        this.resume.set(resume);
-        const normalizedDetails = this.detailsForForm(resume.details);
-        this.form.patchValue({
-          student: {
-            firstName: resume.student.firstName,
-            lastName: resume.student.lastName,
-            documentNumber: resume.student.documentNumber,
-            birthDate: resume.student.birthDate,
-            birthPlace: resume.student.birthPlace ?? '',
-            address: resume.student.address ?? '',
-            phone: resume.student.phone ?? '',
-            email: resume.student.email ?? '',
-            status: resume.student.status,
-            ...(normalizedDetails['personal'] ?? {})
-          },
-          ...normalizedDetails
-        });
-        this.patchDeclaration();
-      },
+      next: (resume) => this.applyResume(resume, true),
       error: () => this.error.set(true)
     });
   }
@@ -636,18 +617,25 @@ export class ResumeComponent {
     this.saving.set(true);
     const studentValue = this.studentPayload();
     const details = this.detailsPayload();
+    const creating = this.isNew();
     const request = this.isNew()
       ? this.service.create(studentValue, null).pipe(
-          switchMap((student) => this.service.updateResumeDetails(student.id, details).pipe(tap(() => void this.router.navigate(['/hojas-de-vida', student.id]))))
+          switchMap((student) => this.service.updateResumeDetails(student.id, details).pipe(
+            switchMap(() => this.service.resume(student.id))
+          ))
         )
-      : this.service.update(this.studentId, studentValue, null).pipe(switchMap(() => this.service.updateResumeDetails(this.studentId, details)));
+      : this.service.update(this.studentId, studentValue, null).pipe(
+          switchMap(() => this.service.updateResumeDetails(this.studentId, details)),
+          switchMap(() => this.service.resume(this.studentId))
+        );
 
     request.pipe(finalize(() => this.saving.set(false))).subscribe({
-      next: () => {
+      next: (resume) => {
+        this.applyResume(resume, true);
         this.saveSuccess.set('Hoja de vida guardada correctamente.');
         this.notifications.show('Hoja de vida guardada correctamente.');
-        if (!this.isNew()) {
-          this.load();
+        if (creating) {
+          void this.router.navigate(['/hojas-de-vida', resume.student.id]);
         }
       },
       error: (error: ApiError) => this.saveError.set(error.message || 'No fue posible guardar la hoja de vida.')
@@ -872,6 +860,31 @@ export class ResumeComponent {
     return this.form.get(String(section.key)) as FormGroup;
   }
 
+  private applyResume(resume: Resume, pristine: boolean): void {
+    this.resume.set(resume);
+    const normalizedDetails = this.detailsForForm(resume.details);
+    this.form.patchValue({
+      student: {
+        ...(normalizedDetails['personal'] ?? {}),
+        firstName: resume.student.firstName,
+        lastName: resume.student.lastName,
+        documentNumber: resume.student.documentNumber,
+        birthDate: resume.student.birthDate,
+        birthPlace: resume.student.birthPlace ?? '',
+        address: resume.student.address ?? '',
+        phone: resume.student.phone ?? '',
+        email: resume.student.email ?? '',
+        status: resume.student.status
+      },
+      ...normalizedDetails
+    }, { emitEvent: false });
+    this.patchDeclaration();
+    if (pristine) {
+      this.form.markAsPristine();
+      this.form.markAsUntouched();
+    }
+  }
+
   private studentPayload(): StudentFormValue {
     const value = (this.form.controls['student'] as FormGroup).getRawValue() as Record<string, string>;
     return {
@@ -971,10 +984,18 @@ export class ResumeComponent {
       if (field.type === 'readonly') {
         continue;
       }
-      const value = values[field.key];
+      const value = this.fieldVisibleForValues(section, field, values) ? values[field.key] : '';
       converted[field.key] = this.isYesNo(field) ? this.yesNoToBoolean(value) : this.emptyToNull(value);
     }
     return converted;
+  }
+
+  private fieldVisibleForValues(section: Section, field: Field, values: Record<string, unknown>): boolean {
+    if (!field.dependsOn) {
+      return true;
+    }
+    const expected = Array.isArray(field.showWhen) ? field.showWhen : [field.showWhen];
+    return expected.includes(values[field.dependsOn] as string);
   }
 
   private isYesNo(field: Field): boolean {
