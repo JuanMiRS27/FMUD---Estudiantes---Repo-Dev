@@ -20,7 +20,8 @@ fmud:
   gateway:
     auth-service-url: ${AUTH_SERVICE_URL:http://localhost:8081}
     student-service-url: ${STUDENT_SERVICE_URL:http://localhost:8082}
-    timeout-seconds: ${GATEWAY_TIMEOUT_SECONDS:3}
+    timeout-seconds: ${GATEWAY_TIMEOUT_SECONDS:30}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
   security:
     jwt:
       issuer: ${JWT_ISSUER:fmud-auth-service}

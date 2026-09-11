@@ -1,9 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, tap, throwError } from 'rxjs';
+import { catchError, map, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AuthenticatedUser, LoginRequest, LoginResponse } from '../models/auth.model';
+import { ApiError, AuthenticatedUser, LoginRequest, LoginResponse } from '../models/auth.model';
 
 const TOKEN_KEY = 'fmud.accessToken';
 const USER_KEY = 'fmud.user';
@@ -21,6 +21,7 @@ export class AuthService {
 
   login(credentials: LoginRequest) {
     return this.http.post<LoginResponse>(`${environment.apiBaseUrl}/auth/login`, credentials).pipe(
+      map((response) => this.validateLoginResponse(response)),
       tap((response) => this.setSession(response))
     );
   }
@@ -48,11 +49,31 @@ export class AuthService {
     }
   }
 
+  private validateLoginResponse(response: LoginResponse | null): LoginResponse {
+    if (!response || !response.accessToken || !response.user) {
+      this.logout(false);
+      throw this.invalidLoginResponseError();
+    }
+    return response;
+  }
+
   private setSession(response: LoginResponse): void {
     localStorage.setItem(TOKEN_KEY, response.accessToken);
     localStorage.setItem(USER_KEY, JSON.stringify(response.user));
     this.tokenState.set(response.accessToken);
     this.userState.set(response.user);
+  }
+
+  private invalidLoginResponseError(): ApiError {
+    return {
+      timestamp: new Date().toISOString(),
+      status: 502,
+      error: 'Bad Gateway',
+      code: 'INVALID_LOGIN_RESPONSE',
+      message: 'No fue posible iniciar sesion. El servidor devolvio una respuesta invalida.',
+      path: `${environment.apiBaseUrl}/auth/login`,
+      details: []
+    };
   }
 
   private readStoredUser(): AuthenticatedUser | null {
