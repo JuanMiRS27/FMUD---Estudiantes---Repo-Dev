@@ -158,13 +158,13 @@ public class GatewayController {
             byte[] body = multipartBody(params, files, boundary);
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.MULTIPART_FORM_DATA_VALUE + "; boundary=" + boundary);
             if (authorization != null) {
                 builder.header(HttpHeaders.AUTHORIZATION, authorization);
             }
             HttpResponse<byte[]> response = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
+                    .connectTimeout(Duration.ofSeconds(properties.timeoutSeconds()))
                     .build()
                     .send(builder.method(method, HttpRequest.BodyPublishers.ofByteArray(body)).build(), HttpResponse.BodyHandlers.ofByteArray());
             HttpHeaders responseHeaders = new HttpHeaders();
@@ -227,19 +227,21 @@ public class GatewayController {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(30));
+                    .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+                    .header(HttpHeaders.ACCEPT_ENCODING, "identity");
             Collections.list(request.getHeaderNames()).forEach(name -> {
                 if (!name.equalsIgnoreCase(HttpHeaders.HOST)
                         && !name.equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)
                         && !name.equalsIgnoreCase(HttpHeaders.CONNECTION)
                         && !name.equalsIgnoreCase(HttpHeaders.EXPECT)
-                        && !name.equalsIgnoreCase(HttpHeaders.UPGRADE)) {
+                        && !name.equalsIgnoreCase(HttpHeaders.UPGRADE)
+                        && !name.equalsIgnoreCase(HttpHeaders.ACCEPT_ENCODING)) {
                     Collections.list(request.getHeaders(name)).forEach(value -> builder.header(name, value));
                 }
             });
             HttpRequest.BodyPublisher publisher = body.length == 0 ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body);
             HttpResponse<byte[]> response = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
+                    .connectTimeout(Duration.ofSeconds(properties.timeoutSeconds()))
                     .build()
                     .send(builder.method(request.getMethod(), publisher).build(), HttpResponse.BodyHandlers.ofByteArray());
             HttpHeaders responseHeaders = new HttpHeaders();
@@ -247,6 +249,8 @@ public class GatewayController {
                     .ifPresent(value -> responseHeaders.setContentType(MediaType.parseMediaType(value)));
             response.headers().firstValue(HttpHeaders.CONTENT_DISPOSITION)
                     .ifPresent(value -> responseHeaders.set(HttpHeaders.CONTENT_DISPOSITION, value));
+            response.headers().firstValue(HttpHeaders.CONTENT_ENCODING)
+                    .ifPresent(value -> responseHeaders.set(HttpHeaders.CONTENT_ENCODING, value));
             return new ResponseEntity<>(response.body(), responseHeaders, HttpStatus.valueOf(response.statusCode()));
         } catch (RestClientResponseException ex) {
             HttpHeaders responseHeaders = new HttpHeaders();
