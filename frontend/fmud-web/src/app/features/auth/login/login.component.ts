@@ -1,8 +1,10 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, OnDestroy, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ApiError } from '../../../core/models/auth.model';
+import { BackendReadinessService } from '../../../core/auth/backend-readiness.service';
+import { finalize, Subscription, switchMap, tap, timeout } from 'rxjs';
 
 @Component({
   selector: 'app-login',
@@ -39,21 +41,31 @@ import { ApiError } from '../../../core/models/auth.model';
             <p class="form-error">{{ errorMessage() }}</p>
           }
 
+          @if (preparing()) {
+            <p role="status" aria-live="polite">Estamos preparando el servicio. Tras un periodo sin uso puede tardar hasta 4 minutos. El ingreso continuara automaticamente.</p>
+          }
+
           <button class="primary-action" type="submit" [disabled]="form.invalid || loading()">
             <span class="button-icon" aria-hidden="true">{{ loading() ? '...' : '->' }}</span>
-            <span>{{ loading() ? 'Ingresando...' : 'Iniciar sesion' }}</span>
+            <span>{{ preparing() ? 'Preparando servicio...' : loading() ? 'Ingresando...' : 'Iniciar sesion' }}</span>
           </button>
+          @if (loading()) {
+            <button type="button" (click)="cancel()">Cancelar</button>
+          }
         </form>
       </section>
     </main>
   `
 })
-export class LoginComponent {
+export class LoginComponent implements OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly readiness = inject(BackendReadinessService);
+  private attempt?: Subscription;
 
   readonly loading = signal(false);
+  readonly preparing = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly canSubmit = computed(() => this.form.valid && !this.loading());
 
@@ -68,13 +80,32 @@ export class LoginComponent {
       return;
     }
     this.loading.set(true);
+    this.preparing.set(true);
     this.errorMessage.set(null);
-    this.auth.login(this.form.getRawValue()).subscribe({
+    const credentials = this.form.getRawValue();
+    this.attempt = this.readiness.waitUntilReady().pipe(
+      tap(() => this.preparing.set(false)),
+      switchMap(() => this.auth.login(credentials).pipe(timeout(30000))),
+      finalize(() => {
+        this.loading.set(false);
+        this.preparing.set(false);
+      })
+    ).subscribe({
       next: () => void this.router.navigate(['/hojas-de-vida']),
       error: (error: ApiError) => {
         this.loading.set(false);
-        this.errorMessage.set(error.message || 'No fue posible iniciar sesion.');
+        this.errorMessage.set((error as unknown as { name?: string }).name === 'TimeoutError'
+          ? 'El servicio tardo demasiado en responder. Intenta nuevamente.'
+          : error.message || 'No fue posible iniciar sesion.');
       }
     });
+  }
+
+  cancel(): void {
+    this.attempt?.unsubscribe();
+  }
+
+  ngOnDestroy(): void {
+    this.cancel();
   }
 }

@@ -34,6 +34,26 @@ Volumenes persistentes:
 - `fmud-student-photos`
 - `fmud-student-documents`
 
+## Arranque en Render Free
+
+El login consulta `/api/health/ready` antes de enviar las credenciales. El gateway
+comprueba en paralelo `/actuator/health` de autenticacion y estudiantes, incluida
+su conexion a la base de datos. Mientras despiertan, el formulario muestra el
+progreso y permite cancelar. Las comprobaciones se reintentan cada 3 segundos
+despues de una respuesta temporal, durante un maximo de 4 minutos. No hay tareas
+periodicas para mantener las instancias activas ni reintentos de contrasenas.
+
+Configuracion usada en Render:
+
+- Gateway: `GATEWAY_TIMEOUT_SECONDS=180`.
+- Los tres servicios: `JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1`. Prioriza el
+  arranque con poca CPU; limita la optimizacion JIT posterior. Reevaluar esta
+  opcion si se migra a instancias permanentes con mayor carga.
+- Static site: rewrite de `/*` a `/index.html`.
+
+El plan gratuito suspende servicios inactivos; esta preparacion tolera el
+arranque, pero no garantiza acceso inmediato tras la suspension.
+
 ## Usuarios de desarrollo
 
 - `admin@fmud.local` / `Cambiar123!`
