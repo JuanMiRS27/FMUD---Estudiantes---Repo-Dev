@@ -134,15 +134,12 @@ h3 {
 }
 
 .brand-mark {
-  display: grid;
   flex: 0 0 auto;
-  place-items: center;
   width: 42px;
   height: 42px;
   border-radius: var(--fmud-radius);
-  background: var(--fmud-primary);
-  color: #ffffff;
-  font-weight: 900;
+  background: #ffffff;
+  object-fit: contain;
 }
 
 .brand-mark.large {

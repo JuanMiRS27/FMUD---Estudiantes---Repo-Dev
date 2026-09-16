@@ -10,7 +10,7 @@ import { SidebarService } from '../../services/sidebar.service';
   template: `
     <aside class="sidebar" [class.collapsed]="sidebar.collapsed()" [class.mobile-open]="sidebar.mobileOpen()">
       <button class="brand" type="button" (click)="sidebar.toggleCollapsed()" aria-label="Alternar barra lateral">
-        <span class="brand-mark">FM</span>
+        <img class="brand-mark" src="logo.jpg" alt="Logo Fundacion Manos Unidas de Dios" />
         @if (!sidebar.collapsed()) {
           <span class="brand-text">Fundaci&oacute;n Manos Unidas de Dios</span>
         }

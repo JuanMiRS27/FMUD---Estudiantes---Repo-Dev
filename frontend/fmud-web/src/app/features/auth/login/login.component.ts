@@ -14,7 +14,7 @@ import { finalize, Subscription, switchMap, tap, timeout } from 'rxjs';
     <main class="login-page">
       <section class="login-panel">
         <div class="login-brand">
-          <span class="brand-mark large">FM</span>
+          <img class="brand-mark large" src="logo.jpg" alt="Logo Fundacion Manos Unidas de Dios" />
           <div>
             <p>Fundacion Manos Unidas de Dios</p>
             <h1>Ingreso institucional</h1>
