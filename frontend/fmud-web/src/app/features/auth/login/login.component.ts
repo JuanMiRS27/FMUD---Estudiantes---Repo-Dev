@@ -42,7 +42,7 @@ import { finalize, Subscription, switchMap, tap, timeout } from 'rxjs';
           }
 
           @if (preparing()) {
-            <p role="status" aria-live="polite">Estamos preparando el servicio. Tras un periodo sin uso puede tardar hasta 4 minutos. El ingreso continuara automaticamente.</p>
+            <p role="status" aria-live="polite">Estamos preparando el servicio. Tras un periodo sin uso puede tardar hasta 5 minutos. El ingreso continuara automaticamente.</p>
           }
 
           <button class="primary-action" type="submit" [disabled]="form.invalid || loading()">
@@ -73,6 +73,13 @@ export class LoginComponent implements OnDestroy {
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(8)]]
   });
+
+  constructor() {
+    // Wake a sleeping Render instance the moment the login page loads, while
+    // the user is still typing credentials. submit() reuses this same shared
+    // attempt, so the cold-start wait is often already finished by then.
+    this.readiness.waitUntilReady().subscribe({ error: () => undefined });
+  }
 
   submit(): void {
     if (!this.canSubmit()) {

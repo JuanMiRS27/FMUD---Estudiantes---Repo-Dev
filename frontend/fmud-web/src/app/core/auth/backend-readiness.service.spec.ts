@@ -38,17 +38,17 @@ describe('BackendReadinessService', () => {
     expect(ready).toBeTrue();
   }));
 
-  it('ends a stalled startup within four minutes', fakeAsync(() => {
+  it('ends a stalled startup within five minutes', fakeAsync(() => {
     let message = '';
     service.waitUntilReady().subscribe({ error: error => message = error.message });
-    for (let elapsed = 0; elapsed < 234000; elapsed += 18000) {
+    for (let elapsed = 0; elapsed < 288000; elapsed += 18000) {
       const request = http.expectOne(url);
       tick(15000);
       expect(request.cancelled).toBeTrue();
       tick(3000);
     }
     const last = http.expectOne(url);
-    tick(6000);
+    tick(12000);
     expect(last.cancelled).toBeTrue();
     expect(message).toContain('a tiempo');
   }));
