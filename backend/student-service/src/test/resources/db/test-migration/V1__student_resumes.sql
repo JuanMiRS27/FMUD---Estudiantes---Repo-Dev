@@ -67,6 +67,7 @@ create table students.student_documents (
   constraint fk_student_documents_uploaded_by foreign key (uploaded_by_user_id) references auth.users(id) on delete restrict,
   constraint ck_student_documents_type check (document_type in (
     'PHOTO',
+    'SIGNATURE',
     'IDENTITY_DOCUMENT',
     'CIVIL_REGISTRY',
     'STUDY_CERTIFICATE',
@@ -330,7 +331,6 @@ create table students.resume_declaration_info (
   truthful_complete_information boolean,
   applicant_name varchar(200),
   identity_document varchar(30),
-  signature_management_space varchar(200),
   signature_date date,
   updated_at timestamp with time zone not null
 );

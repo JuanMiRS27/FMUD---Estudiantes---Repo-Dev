@@ -35,6 +35,7 @@ import java.util.UUID;
 public class StudentResumeService implements StudentResumeUseCase {
     private static final String NAME_PATTERN = "^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ -]+$";
     private static final String PHONE_PATTERN = "^\\+?[0-9](?:[0-9 ]{4,18}[0-9])?$";
+    private static final List<String> SINGLETON_DOCUMENT_TYPES = List.of("PHOTO", "SIGNATURE");
     private final StudentRepositoryPort students;
     private final DocumentRepositoryPort documents;
     private final HistoryRepositoryPort history;
@@ -84,7 +85,7 @@ public class StudentResumeService implements StudentResumeUseCase {
         Student saved = students.save(updated);
         auditStudent(id, actor, HistoryAction.STUDENT_UPDATED, "Informacion del estudiante actualizada.");
         if (command.photo() != null && !command.photo().isEmpty()) {
-            replaceActivePhoto(id, actor);
+            replaceActiveSingleton(id, "PHOTO", actor);
             savePhotoDocument(id, storage.storePhoto(command.photo()), actor, Instant.now(), "Fotografia actualizada.");
         }
         return toDto(saved);
@@ -138,8 +139,8 @@ public class StudentResumeService implements StudentResumeUseCase {
         getDomain(studentId);
         validateDocument(command);
         String documentType = clean(command.documentType());
-        if ("PHOTO".equals(documentType)) {
-            replaceActivePhoto(studentId, actor);
+        if (SINGLETON_DOCUMENT_TYPES.contains(documentType)) {
+            replaceActiveSingleton(studentId, documentType, actor);
         }
         FileStoragePort.StoredFile file = "PHOTO".equals(documentType) ? storage.storePhoto(command.file()) : storage.storeDocument(command.file());
         Instant now = Instant.now();
@@ -177,8 +178,8 @@ public class StudentResumeService implements StudentResumeUseCase {
                 current.createdAt(), Instant.now());
         documents.save(replaced);
         String documentType = clean(command.documentType());
-        if ("PHOTO".equals(documentType)) {
-            replaceActivePhoto(studentId, actor);
+        if (SINGLETON_DOCUMENT_TYPES.contains(documentType)) {
+            replaceActiveSingleton(studentId, documentType, actor);
         }
         FileStoragePort.StoredFile file = "PHOTO".equals(documentType) ? storage.storePhoto(command.file()) : storage.storeDocument(command.file());
         Instant now = Instant.now();
@@ -257,7 +258,7 @@ public class StudentResumeService implements StudentResumeUseCase {
     private void validateDocument(DocumentCommand command) {
         require(command.documentType(), "El tipo de documento es obligatorio.");
         require(command.displayName(), "El nombre visible es obligatorio.");
-        if (!List.of("PHOTO", "IDENTITY_DOCUMENT", "CIVIL_REGISTRY", "STUDY_CERTIFICATE", "HEALTH_AFFILIATION", "SIGNED_RESUME", "OTHER")
+        if (!List.of("PHOTO", "SIGNATURE", "IDENTITY_DOCUMENT", "CIVIL_REGISTRY", "STUDY_CERTIFICATE", "HEALTH_AFFILIATION", "SIGNED_RESUME", "OTHER")
                 .contains(clean(command.documentType()))) {
             throw new BadRequestException("El tipo de documento no es valido.");
         }
@@ -286,12 +287,13 @@ public class StudentResumeService implements StudentResumeUseCase {
         return filename.replace("\\", "_").replace("/", "_");
     }
 
-    private void replaceActivePhoto(UUID studentId, ActorCommand actor) {
-        documents.findActiveByStudentIdAndType(studentId, "PHOTO").ifPresent(current -> {
+    private void replaceActiveSingleton(UUID studentId, String documentType, ActorCommand actor) {
+        documents.findActiveByStudentIdAndType(studentId, documentType).ifPresent(current -> {
             documents.save(new StudentDocument(current.id(), current.studentId(), current.documentType(), current.displayName(), current.originalName(),
                     current.storageKey(), current.contentType(), current.size(), current.description(), DocumentStatus.REPLACED, current.uploadedByUserId(),
                     current.createdAt(), Instant.now()));
-            auditDocument(current.id(), actor, HistoryAction.DOCUMENT_REPLACED, "Fotografia reemplazada.");
+            String summary = "SIGNATURE".equals(documentType) ? "Firma reemplazada." : "Fotografia reemplazada.";
+            auditDocument(current.id(), actor, HistoryAction.DOCUMENT_REPLACED, summary);
         });
     }
 

@@ -204,7 +204,6 @@ export interface DeclarationInfo {
   truthfulCompleteInformation: boolean | null;
   applicantName: string | null;
   identityDocument: string | null;
-  signatureManagementSpace: string | null;
   signatureDate: string | null;
 }
 

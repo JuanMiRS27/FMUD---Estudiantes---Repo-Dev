@@ -88,7 +88,7 @@ class StudentResumeServiceTest {
                 new ResumeDetailsDto.AcademicPerformanceInfoDto(null, List.of("Matematicas"), List.of(), null, null, null, null, null, null, null, null),
                 new ResumeDetailsDto.ProgramKnowledgeInfoDto("Cuidado humanizado", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
                 new ResumeDetailsDto.InstitutionalCommitmentInfoDto(null, null, List.of(), null, null, true, null, null, null, null, null, null),
-                new ResumeDetailsDto.DeclarationInfoDto(true, null, null, null, null)
+                new ResumeDetailsDto.DeclarationInfoDto(true, null, null, null)
         );
 
         service.updateDetails(student.id(), detail, secretary);
@@ -110,6 +110,21 @@ class StudentResumeServiceTest {
 
         service.deleteDocument(student.id(), document.id(), admin);
         assertThat(documents.rows.get(document.id()).status()).isEqualTo(DocumentStatus.DELETED);
+    }
+
+    @Test
+    void attachingSignatureReplacesPreviousActiveSignatureAndKeepsOnlyOneActive() {
+        var student = service.create(validStudent("12345678"), admin);
+        var firstFile = new MockMultipartFile("file", "firma1.pdf", "application/pdf", "firma1".getBytes());
+        var first = service.attachDocument(student.id(), new DocumentCommand("SIGNATURE", "Firma del aspirante", "", firstFile), secretary);
+
+        var secondFile = new MockMultipartFile("file", "firma2.pdf", "application/pdf", "firma2".getBytes());
+        var second = service.attachDocument(student.id(), new DocumentCommand("SIGNATURE", "Firma del aspirante", "", secondFile), secretary);
+
+        assertThat(documents.rows.get(first.id()).status()).isEqualTo(DocumentStatus.REPLACED);
+        assertThat(documents.rows.get(second.id()).status()).isEqualTo(DocumentStatus.ACTIVE);
+        assertThat(service.listDocuments(student.id(), "SIGNATURE")).hasSize(1);
+        assertThat(service.history(student.id())).extracting("summary").contains("Firma reemplazada.");
     }
 
     private StudentCommand validStudent(String document) {

@@ -200,7 +200,6 @@ public record ResumeDetailsDto(
             Boolean truthfulCompleteInformation,
             String applicantName,
             String identityDocument,
-            String signatureManagementSpace,
             LocalDate signatureDate
     ) {
     }

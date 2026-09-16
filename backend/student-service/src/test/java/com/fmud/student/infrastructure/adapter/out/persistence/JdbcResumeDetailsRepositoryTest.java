@@ -45,7 +45,7 @@ class JdbcResumeDetailsRepositoryTest {
                 new ResumeDetailsDto.AcademicPerformanceInfoDto("Matematicas", List.of("Matematicas"), List.of("Investigacion", "Trabajo en equipo"), true, "Olimpiadas", "Ingles", "Bueno", "Entre 5 y 10", "Cumple", "Graduacion", "Lectura"),
                 new ResumeDetailsDto.ProgramKnowledgeInfoDto("Cuidado", "Adulto mayor", "Proceso", "Diferencia", "Vocacion", true, "Familia", "Paciencia", "Respeto", "Acompanamiento", "Ayudar", "Clave", "Empatia", "Practica", "Comunidad", "Hospital", "Trato digno", true, "Tiempo", "Dialoga", "Compromiso"),
                 new ResumeDetailsDto.InstitutionalCommitmentInfoDto(true, "La conozco", List.of("Familiar o amigo"), "Apoyo", true, true, true, true, true, true, true, true),
-                new ResumeDetailsDto.DeclarationInfoDto(true, "Ana Perez", "12345678", "Firma", LocalDate.of(2026, 9, 9))
+                new ResumeDetailsDto.DeclarationInfoDto(true, "Ana Perez", "12345678", LocalDate.of(2026, 9, 9))
         ));
 
         ResumeDetailsDto found = repository.findByStudentId(studentId);

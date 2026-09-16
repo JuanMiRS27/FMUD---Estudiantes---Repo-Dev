@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { finalize, switchMap } from 'rxjs';
+import { finalize, of, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { ApiError } from '../../core/models/auth.model';
 import { NotificationService } from '../../core/services/notification.service';
@@ -32,6 +32,7 @@ const DOCUMENT_TYPES = [
   { value: 'HEALTH_AFFILIATION', label: 'Afiliacion a salud' },
   { value: 'SIGNED_RESUME', label: 'Hoja de vida firmada' },
   { value: 'PHOTO', label: 'Fotografia' },
+  { value: 'SIGNATURE', label: 'Firma del aspirante' },
   { value: 'OTHER', label: 'Otro' }
 ];
 
@@ -255,7 +256,6 @@ const SECTIONS: Section[] = [
       { key: 'truthfulCompleteInformation', label: 'Confirmacion de que la informacion es veraz y completa', type: 'radio', options: YES_NO, required: true },
       { key: 'applicantName', label: 'Nombre del aspirante', type: 'text' },
       { key: 'identityDocument', label: 'Documento de identidad', type: 'text' },
-      { key: 'signatureManagementSpace', label: 'Firma o espacio preparado para gestion de firma', type: 'text' },
       { key: 'signatureDate', label: 'Fecha', type: 'date' }
     ]
   }
@@ -291,9 +291,7 @@ const SECTIONS: Section[] = [
           <div class="panel-title">
             <div class="user-summary">
               <span class="student-photo">
-                @if (photoPreview(); as preview) {
-                  <img [src]="preview" [alt]="'Foto de ' + fullName()" />
-                } @else if (photoUrl(data.student.photoUrl); as url) {
+                @if (photoDisplayUrl(); as url) {
                   <img [src]="url" [alt]="'Foto de ' + fullName()" />
                 } @else {
                   <span>{{ studentInitials(data.student.firstName, data.student.lastName) }}</span>
@@ -330,9 +328,7 @@ const SECTIONS: Section[] = [
               @if (section.key === 'student') {
                 <div class="photo-picker">
                   <span class="photo-picker-preview">
-                    @if (photoPreview(); as preview) {
-                      <img [src]="preview" [alt]="'Foto de ' + fullName()" />
-                    } @else if (!isNew() && photoUrl(resume()?.student?.photoUrl ?? null); as url) {
+                    @if (photoDisplayUrl(); as url) {
                       <img [src]="url" [alt]="'Foto de ' + fullName()" />
                     } @else if (!isNew() && resume(); as data) {
                       <span>{{ studentInitials(data.student.firstName, data.student.lastName) }}</span>
@@ -348,6 +344,29 @@ const SECTIONS: Section[] = [
                       </label>
                       @if (photoError()) {
                         <span class="field-error">{{ photoError() }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+              @if (section.key === 'declaration') {
+                <div class="signature-picker">
+                  <span class="signature-picker-label">Firma del aspirante</span>
+                  <span class="signature-picker-preview">
+                    @if (signaturePreview(); as preview) {
+                      <img [src]="preview" alt="Firma del aspirante" />
+                    } @else {
+                      <span>Sin firma adjunta</span>
+                    }
+                  </span>
+                  @if (!viewMode()) {
+                    <div class="photo-picker-actions">
+                      <label class="secondary-action photo-picker-button">
+                        {{ signaturePreview() ? 'Cambiar firma' : 'Adjuntar firma' }}
+                        <input type="file" accept="image/png,image/jpeg,image/webp" (change)="selectSignature($event)" hidden />
+                      </label>
+                      @if (signatureError()) {
+                        <span class="field-error">{{ signatureError() }}</span>
                       }
                     </div>
                   }
@@ -594,7 +613,15 @@ export class ResumeComponent {
   readonly viewMode = signal(false);
   readonly photoFile = signal<File | null>(null);
   readonly photoPreview = signal<string | null>(null);
+  readonly persistedPhotoUrl = signal<string | null>(null);
+  readonly photoDisplayUrl = computed(() => this.photoPreview() ?? this.persistedPhotoUrl());
   readonly photoError = signal('');
+  readonly signatureFile = signal<File | null>(null);
+  readonly signatureLocalPreview = signal<string | null>(null);
+  readonly persistedSignatureUrl = signal<string | null>(null);
+  readonly signatureError = signal('');
+  readonly activeSignatureDocument = signal<StudentDocument | null>(null);
+  readonly signaturePreview = computed(() => this.signatureLocalPreview() ?? this.persistedSignatureUrl());
   readonly birthDateValue = signal('');
   readonly canDelete = computed(() => this.auth.user()?.role === 'ADMIN');
   readonly isNew = computed(() => !this.studentId);
@@ -659,11 +686,13 @@ export class ResumeComponent {
     const request = this.isNew()
       ? this.service.create(studentValue, photo).pipe(
           switchMap((student) => this.service.updateResumeDetails(student.id, details).pipe(
+            switchMap(() => this.uploadSignatureIfNeeded(student.id)),
             switchMap(() => this.service.resume(student.id))
           ))
         )
       : this.service.update(this.studentId, studentValue, photo).pipe(
           switchMap(() => this.service.updateResumeDetails(this.studentId, details)),
+          switchMap(() => this.uploadSignatureIfNeeded(this.studentId)),
           switchMap(() => this.service.resume(this.studentId))
         );
 
@@ -675,6 +704,11 @@ export class ResumeComponent {
         }
         this.photoFile.set(null);
         this.photoPreview.set(null);
+        if (this.signatureLocalPreview()) {
+          URL.revokeObjectURL(this.signatureLocalPreview()!);
+        }
+        this.signatureFile.set(null);
+        this.signatureLocalPreview.set(null);
         this.saveSuccess.set('Hoja de vida guardada correctamente.');
         this.notifications.show('Hoja de vida guardada correctamente.');
         if (creating) {
@@ -875,10 +909,6 @@ export class ResumeComponent {
     return labels[value] ?? value;
   }
 
-  photoUrl(path: string | null): string | null {
-    return this.service.photoUrl(path);
-  }
-
   selectPhoto(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.item(0) ?? null;
@@ -898,6 +928,27 @@ export class ResumeComponent {
     }
     this.photoFile.set(file);
     this.photoPreview.set(file ? URL.createObjectURL(file) : null);
+  }
+
+  selectSignature(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.item(0) ?? null;
+    this.signatureError.set('');
+    if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      this.signatureError.set('La firma debe estar en formato PNG, JPG o WEBP.');
+      input.value = '';
+      return;
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      this.signatureError.set('La firma no puede superar 5 MB.');
+      input.value = '';
+      return;
+    }
+    if (this.signatureLocalPreview()) {
+      URL.revokeObjectURL(this.signatureLocalPreview()!);
+    }
+    this.signatureFile.set(file);
+    this.signatureLocalPreview.set(file ? URL.createObjectURL(file) : null);
   }
 
   studentInitials(firstName: string, lastName: string): string {
@@ -944,6 +995,8 @@ export class ResumeComponent {
     }, { emitEvent: false });
     this.birthDateValue.set(resume.student.birthDate ?? '');
     this.patchDeclaration();
+    this.loadPhotoPreview(resume);
+    this.loadSignaturePreview(resume);
     if (pristine) {
       this.form.markAsPristine();
       this.form.markAsUntouched();
@@ -1093,6 +1146,49 @@ export class ResumeComponent {
 
   private toRecord(value: unknown): Record<string, unknown> {
     return (value ?? {}) as Record<string, unknown>;
+  }
+
+  private loadPhotoPreview(resume: Resume): void {
+    if (this.persistedPhotoUrl()) {
+      URL.revokeObjectURL(this.persistedPhotoUrl()!);
+      this.persistedPhotoUrl.set(null);
+    }
+    if (!resume.student.photoUrl) {
+      return;
+    }
+    this.service.photoBlob(resume.student.id).subscribe((response) => {
+      if (response.body) {
+        this.persistedPhotoUrl.set(URL.createObjectURL(response.body));
+      }
+    });
+  }
+
+  private loadSignaturePreview(resume: Resume): void {
+    const active = resume.documents.find((document) => document.documentType === 'SIGNATURE' && document.status === 'ACTIVE') ?? null;
+    this.activeSignatureDocument.set(active);
+    if (this.persistedSignatureUrl()) {
+      URL.revokeObjectURL(this.persistedSignatureUrl()!);
+      this.persistedSignatureUrl.set(null);
+    }
+    if (!active) {
+      return;
+    }
+    this.service.downloadDocument(resume.student.id, active.id).subscribe((response) => {
+      if (response.body) {
+        this.persistedSignatureUrl.set(URL.createObjectURL(response.body));
+      }
+    });
+  }
+
+  private uploadSignatureIfNeeded(studentId: string) {
+    const file = this.signatureFile();
+    if (!file) {
+      return of(null);
+    }
+    const active = this.activeSignatureDocument();
+    return active
+      ? this.service.replaceDocument(studentId, active.id, 'SIGNATURE', 'Firma del aspirante', '', file)
+      : this.service.attachDocument(studentId, 'SIGNATURE', 'Firma del aspirante', '', file);
   }
 
   private calculateAge(value: string): string {

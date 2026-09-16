@@ -80,6 +80,13 @@ export class StudentsService {
     return path ? path : null;
   }
 
+  photoBlob(studentId: string) {
+    return this.http.get(`${this.baseUrl}/${studentId}/photo`, {
+      observe: 'response',
+      responseType: 'blob'
+    });
+  }
+
   private formData(value: StudentFormValue, photo: File | null): FormData {
     const data = new FormData();
     Object.entries(value).forEach(([key, entry]) => data.append(key, entry));

@@ -172,7 +172,7 @@ public class JdbcResumeDetailsRepository implements ResumeDetailsRepositoryPort 
     private ResumeDetailsDto.DeclarationInfoDto declaration(UUID studentId) {
         return one("select * from students.resume_declaration_info where student_id = ?", rs -> new ResumeDetailsDto.DeclarationInfoDto(
                 bool(rs, "truthful_complete_information"), text(rs, "applicant_name"), text(rs, "identity_document"),
-                text(rs, "signature_management_space"), date(rs, "signature_date")
+                date(rs, "signature_date")
         ), emptyDeclaration(), studentId);
     }
 
@@ -268,9 +268,9 @@ public class JdbcResumeDetailsRepository implements ResumeDetailsRepositoryPort 
 
     private void saveDeclaration(UUID studentId, ResumeDetailsDto.DeclarationInfoDto value) {
         var v = value == null ? emptyDeclaration() : value;
-        upsert("resume_declaration_info", "truthful_complete_information, applicant_name, identity_document, signature_management_space, signature_date",
-                "?, ?, ?, ?, ?", "truthful_complete_information = excluded.truthful_complete_information, applicant_name = excluded.applicant_name, identity_document = excluded.identity_document, signature_management_space = excluded.signature_management_space, signature_date = excluded.signature_date",
-                studentId, v.truthfulCompleteInformation(), clean(v.applicantName()), clean(v.identityDocument()), clean(v.signatureManagementSpace()), v.signatureDate());
+        upsert("resume_declaration_info", "truthful_complete_information, applicant_name, identity_document, signature_date",
+                "?, ?, ?, ?", "truthful_complete_information = excluded.truthful_complete_information, applicant_name = excluded.applicant_name, identity_document = excluded.identity_document, signature_date = excluded.signature_date",
+                studentId, v.truthfulCompleteInformation(), clean(v.applicantName()), clean(v.identityDocument()), v.signatureDate());
     }
 
     private void upsert(String table, String columns, String placeholders, String updates, UUID studentId, Object... values) {
@@ -368,7 +368,7 @@ public class JdbcResumeDetailsRepository implements ResumeDetailsRepositoryPort 
     }
 
     private ResumeDetailsDto.DeclarationInfoDto emptyDeclaration() {
-        return new ResumeDetailsDto.DeclarationInfoDto(null, null, null, null, null);
+        return new ResumeDetailsDto.DeclarationInfoDto(null, null, null, null);
     }
 
     @FunctionalInterface
