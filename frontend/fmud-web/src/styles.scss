@@ -674,6 +674,44 @@ a:focus-visible {
   height: 156px;
 }
 
+.photo-picker {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.photo-picker-preview {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border: 1px solid var(--fmud-border);
+  border-radius: var(--fmud-radius);
+  background: var(--fmud-primary-soft);
+  color: var(--fmud-primary);
+  font-weight: 900;
+}
+
+.photo-picker-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-picker-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.photo-picker-button {
+  cursor: pointer;
+  text-align: center;
+}
+
 .status-pill,
 .status-chip {
   display: inline-flex;

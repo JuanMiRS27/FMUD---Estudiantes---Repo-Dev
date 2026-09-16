@@ -291,7 +291,9 @@ const SECTIONS: Section[] = [
           <div class="panel-title">
             <div class="user-summary">
               <span class="student-photo">
-                @if (photoUrl(data.student.photoUrl); as url) {
+                @if (photoPreview(); as preview) {
+                  <img [src]="preview" [alt]="'Foto de ' + fullName()" />
+                } @else if (photoUrl(data.student.photoUrl); as url) {
                   <img [src]="url" [alt]="'Foto de ' + fullName()" />
                 } @else {
                   <span>{{ studentInitials(data.student.firstName, data.student.lastName) }}</span>
@@ -325,6 +327,32 @@ const SECTIONS: Section[] = [
               <small>{{ sectionComplete(section) ? 'Completa' : 'Incompleta' }}</small>
             </button>
             @if (activeSection() === section.key) {
+              @if (section.key === 'student') {
+                <div class="photo-picker">
+                  <span class="photo-picker-preview">
+                    @if (photoPreview(); as preview) {
+                      <img [src]="preview" [alt]="'Foto de ' + fullName()" />
+                    } @else if (!isNew() && photoUrl(resume()?.student?.photoUrl ?? null); as url) {
+                      <img [src]="url" [alt]="'Foto de ' + fullName()" />
+                    } @else if (!isNew() && resume(); as data) {
+                      <span>{{ studentInitials(data.student.firstName, data.student.lastName) }}</span>
+                    } @else {
+                      <span>Sin foto</span>
+                    }
+                  </span>
+                  @if (!viewMode()) {
+                    <div class="photo-picker-actions">
+                      <label class="secondary-action photo-picker-button">
+                        {{ photoFile() || (!isNew() && resume()?.student?.photoUrl) ? 'Cambiar foto' : 'Seleccionar foto' }}
+                        <input type="file" accept="image/png,image/jpeg,image/webp" (change)="selectPhoto($event)" hidden />
+                      </label>
+                      @if (photoError()) {
+                        <span class="field-error">{{ photoError() }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
               <div class="field-grid" [formGroupName]="section.key">
                 @for (field of section.fields; track field.key) {
                   @if (visible(section, field)) {
@@ -564,9 +592,13 @@ export class ResumeComponent {
   readonly pendingDocumentDelete = signal<StudentDocument | null>(null);
   readonly activeSection = signal<Section['key']>('student');
   readonly viewMode = signal(false);
+  readonly photoFile = signal<File | null>(null);
+  readonly photoPreview = signal<string | null>(null);
+  readonly photoError = signal('');
+  readonly birthDateValue = signal('');
   readonly canDelete = computed(() => this.auth.user()?.role === 'ADMIN');
   readonly isNew = computed(() => !this.studentId);
-  readonly age = computed(() => this.calculateAge((this.form.controls['student'] as FormGroup).controls['birthDate'].value));
+  readonly age = computed(() => this.calculateAge(this.birthDateValue()));
   readonly fullName = computed(() => {
     const student = this.resume()?.student;
     return student ? `${student.firstName} ${student.lastName}` : '';
@@ -592,7 +624,12 @@ export class ResumeComponent {
     } else {
       this.load();
     }
-    ((this.form.controls['student'] as FormGroup).controls['birthDate'] as FormControl).valueChanges.subscribe(() => this.patchDeclaration());
+    const birthDateControl = (this.form.controls['student'] as FormGroup).controls['birthDate'] as FormControl;
+    this.birthDateValue.set(birthDateControl.value ?? '');
+    birthDateControl.valueChanges.subscribe((value) => {
+      this.birthDateValue.set(value ?? '');
+      this.patchDeclaration();
+    });
     (this.form.controls['student'] as FormGroup).valueChanges.subscribe(() => this.patchDeclaration());
   }
 
@@ -618,13 +655,14 @@ export class ResumeComponent {
     const studentValue = this.studentPayload();
     const details = this.detailsPayload();
     const creating = this.isNew();
+    const photo = this.photoFile();
     const request = this.isNew()
-      ? this.service.create(studentValue, null).pipe(
+      ? this.service.create(studentValue, photo).pipe(
           switchMap((student) => this.service.updateResumeDetails(student.id, details).pipe(
             switchMap(() => this.service.resume(student.id))
           ))
         )
-      : this.service.update(this.studentId, studentValue, null).pipe(
+      : this.service.update(this.studentId, studentValue, photo).pipe(
           switchMap(() => this.service.updateResumeDetails(this.studentId, details)),
           switchMap(() => this.service.resume(this.studentId))
         );
@@ -632,6 +670,11 @@ export class ResumeComponent {
     request.pipe(finalize(() => this.saving.set(false))).subscribe({
       next: (resume) => {
         this.applyResume(resume, true);
+        if (this.photoPreview()) {
+          URL.revokeObjectURL(this.photoPreview()!);
+        }
+        this.photoFile.set(null);
+        this.photoPreview.set(null);
         this.saveSuccess.set('Hoja de vida guardada correctamente.');
         this.notifications.show('Hoja de vida guardada correctamente.');
         if (creating) {
@@ -836,6 +879,27 @@ export class ResumeComponent {
     return this.service.photoUrl(path);
   }
 
+  selectPhoto(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.item(0) ?? null;
+    this.photoError.set('');
+    if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      this.photoError.set('La fotografia debe estar en formato JPG, PNG o WEBP.');
+      input.value = '';
+      return;
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      this.photoError.set('La fotografia no puede superar 5 MB.');
+      input.value = '';
+      return;
+    }
+    if (this.photoPreview()) {
+      URL.revokeObjectURL(this.photoPreview()!);
+    }
+    this.photoFile.set(file);
+    this.photoPreview.set(file ? URL.createObjectURL(file) : null);
+  }
+
   studentInitials(firstName: string, lastName: string): string {
     return `${firstName.at(0) ?? ''}${lastName.at(0) ?? ''}`.toUpperCase();
   }
@@ -878,6 +942,7 @@ export class ResumeComponent {
       },
       ...normalizedDetails
     }, { emitEvent: false });
+    this.birthDateValue.set(resume.student.birthDate ?? '');
     this.patchDeclaration();
     if (pristine) {
       this.form.markAsPristine();
@@ -1031,17 +1096,23 @@ export class ResumeComponent {
   }
 
   private calculateAge(value: string): string {
-    if (!value) {
-      return '';
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
+    if (!match) {
+      return '-';
     }
-    const birth = new Date(`${value}T00:00:00`);
+    const [, yearStr, monthStr, dayStr] = match;
+    const birthYear = Number(yearStr);
+    const birthMonth = Number(monthStr);
+    const birthDay = Number(dayStr);
     const today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-    const m = today.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1;
+    const currentDay = today.getDate();
+    let age = currentYear - birthYear;
+    if (currentMonth < birthMonth || (currentMonth === birthMonth && currentDay < birthDay)) {
       age--;
     }
-    return Number.isFinite(age) && age >= 0 ? String(age) : '';
+    return Number.isFinite(age) && age >= 0 ? String(age) : '-';
   }
 
   private trimGroup(group: FormGroup): void {
